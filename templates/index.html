@@ -1,0 +1,1924 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cashflow Pattern Analysis</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0b;
+            --bg-secondary: #111113;
+            --bg-tertiary: #18181b;
+            --bg-hover: #27272a;
+            --border-color: #27272a;
+            --border-subtle: #1f1f23;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --radius: 8px;
+            --radius-lg: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .app { display: flex; min-height: 100vh; }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .logo { padding: 20px; border-bottom: 1px solid var(--border-color); }
+        .logo h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+        .logo span { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
+
+        .nav { flex: 1; padding: 12px 8px; overflow-y: auto; }
+        .nav-section { margin-bottom: 20px; }
+        .nav-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 12px; margin-bottom: 6px; }
+
+        .nav-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            background: transparent;
+            border: none;
+            border-radius: var(--radius);
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-align: left;
+        }
+        .nav-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .nav-btn.active { background: var(--accent); color: white; }
+        .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .nav-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .nav-btn .badge { margin-left: auto; background: var(--bg-hover); padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+        .nav-btn.active .badge { background: rgba(255,255,255,0.2); }
+
+        .sidebar-stats { padding: 12px; border-top: 1px solid var(--border-color); background: var(--bg-tertiary); }
+        .stat-row { display: flex; justify-content: space-between; padding: 6px 0; }
+        .stat-row:not(:last-child) { border-bottom: 1px solid var(--border-subtle); }
+        .stat-label { font-size: 11px; color: var(--text-muted); }
+        .stat-value { font-size: 12px; font-weight: 600; }
+
+        /* Main */
+        .main { flex: 1; margin-left: 260px; min-height: 100vh; }
+        .header {
+            position: sticky; top: 0;
+            background: rgba(10, 10, 11, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 50;
+        }
+        .header-title { font-size: 14px; font-weight: 500; color: var(--text-secondary); }
+        .content { padding: 24px; }
+
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* Cards */
+        .card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 20px; }
+        .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; }
+        .card-title { font-size: 13px; font-weight: 600; }
+        .card-body { padding: 20px; }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 8px 14px; font-size: 13px; font-weight: 500;
+            border-radius: var(--radius); border: none; cursor: pointer;
+            transition: all 0.15s ease; font-family: inherit;
+        }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
+        .btn-secondary:hover { background: var(--bg-hover); border-color: var(--text-muted); }
+        .btn-ghost { background: transparent; color: var(--text-secondary); }
+        .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .btn-danger { background: transparent; color: var(--danger); }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.1); }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn svg { width: 14px; height: 14px; }
+
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+        .stat-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; }
+        .stat-card-label { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+        .stat-card-value { font-size: 20px; font-weight: 600; }
+        .stat-card-unit { font-size: 11px; color: var(--text-muted); margin-left: 2px; }
+
+        /* Upload */
+        .upload-area { border: 2px dashed var(--border-color); border-radius: var(--radius-lg); padding: 48px; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .upload-area:hover, .upload-area.dragover { border-color: var(--accent); background: rgba(59, 130, 246, 0.05); }
+        .upload-icon { width: 48px; height: 48px; margin: 0 auto 16px; color: var(--text-muted); }
+        .upload-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+        .upload-desc { font-size: 12px; color: var(--text-muted); }
+
+        /* Form */
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
+        .form-input {
+            width: 100%; padding: 9px 12px;
+            background: var(--bg-primary); border: 1px solid var(--border-color);
+            border-radius: var(--radius); color: var(--text-primary);
+            font-size: 13px; font-family: inherit;
+        }
+        .form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+        .form-input::placeholder { color: var(--text-muted); }
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 36px;
+        }
+        .form-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; padding: 4px; background: var(--bg-primary); border-radius: var(--radius); margin-bottom: 20px; }
+        .tab { flex: 1; padding: 8px 14px; font-size: 12px; font-weight: 500; color: var(--text-secondary); background: transparent; border: none; border-radius: 6px; cursor: pointer; }
+        .tab:hover { color: var(--text-primary); }
+        .tab.active { background: var(--bg-tertiary); color: var(--text-primary); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Scenario List */
+        .scenario-list { display: flex; flex-direction: column; gap: 8px; }
+        .scenario-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--bg-tertiary); border-radius: var(--radius); }
+        .scenario-item:hover { background: var(--bg-hover); }
+        .scenario-icon { width: 36px; height: 36px; background: rgba(59, 130, 246, 0.1); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; color: var(--accent); }
+        .scenario-info { flex: 1; min-width: 0; }
+        .scenario-name { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+        .scenario-desc { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .scenario-actions { display: flex; gap: 6px; }
+
+        /* Empty State */
+        .empty-state { text-align: center; padding: 48px 24px; }
+        .empty-icon { width: 40px; height: 40px; background: var(--bg-tertiary); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; color: var(--text-muted); }
+        .empty-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .empty-desc { font-size: 12px; color: var(--text-muted); }
+
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); width: 100%; max-width: 520px; max-height: 90vh; overflow: visible; display: flex; flex-direction: column; }
+        .modal.modal-lg { max-width: 900px; }
+        .modal.modal-xl { max-width: 1200px; }
+        .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; }
+        .modal-title { font-size: 15px; font-weight: 600; }
+        .modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; color: var(--text-muted); cursor: pointer; border-radius: var(--radius); }
+        .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .modal-body { padding: 20px; overflow: visible; flex: 1; }
+        .modal-body .multi-select-dropdown { position: fixed; z-index: 10000; }
+        .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px; position: relative; z-index: 1; background: var(--bg-secondary); }
+
+        /* Table */
+        .table-container { overflow-x: auto; border: 1px solid var(--border-color); border-radius: var(--radius); }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .data-table th { background: var(--bg-tertiary); padding: 10px 12px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); white-space: nowrap; position: sticky; top: 0; }
+        .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
+        .data-table tr:hover td { background: var(--bg-hover); }
+        .data-table tr.selected td { background: rgba(59, 130, 246, 0.1); }
+        .data-table .num { text-align: right; font-family: 'SF Mono', Monaco, monospace; font-size: 11px; }
+        .data-table .checkbox-cell { width: 40px; text-align: center; }
+
+        /* Chips */
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 16px; font-size: 11px; color: var(--accent); }
+        .chip-remove { cursor: pointer; opacity: 0.7; }
+        .chip-remove:hover { opacity: 1; }
+
+        /* Pagination */
+        .pagination { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; font-size: 12px; color: var(--text-muted); }
+        .pagination-btns { display: flex; gap: 4px; }
+
+        /* Filter bar */
+        .filter-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+        .filter-input { padding: 7px 12px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius); color: var(--text-primary); font-size: 12px; min-width: 150px; }
+        .filter-input:focus { outline: none; border-color: var(--accent); }
+
+        /* Preview Table Wrapper */
+        .preview-wrapper { max-height: 500px; overflow: auto; border: 1px solid var(--border-color); border-radius: var(--radius); }
+        .preview-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .preview-table th { background: var(--bg-tertiary); padding: 8px 10px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); position: sticky; top: 0; white-space: nowrap; }
+        .preview-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
+        .preview-table tr:hover td { background: var(--bg-hover); }
+        .preview-table .num { text-align: right; font-family: monospace; }
+
+        /* View Tabs */
+        .view-tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); }
+        .view-tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text-muted); background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+        .view-tab:hover { color: var(--text-secondary); }
+        .view-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        /* Toast */
+        .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+        .toast { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 12px 16px; display: flex; align-items: center; gap: 10px; min-width: 280px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); animation: slideIn 0.2s ease; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .toast-icon { width: 18px; height: 18px; flex-shrink: 0; }
+        .toast-icon.success { color: var(--success); }
+        .toast-icon.error { color: var(--danger); }
+        .toast-message { font-size: 12px; }
+
+        /* Loading */
+        .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 250; align-items: center; justify-content: center; }
+        .loading-overlay.active { display: flex; }
+        .spinner { width: 36px; height: 36px; border: 3px solid var(--border-color); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Quick Actions Grid */
+        .actions-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+        .action-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; cursor: pointer; transition: all 0.15s; }
+        .action-card:hover { border-color: var(--accent); background: var(--bg-tertiary); }
+        .action-card-icon { width: 36px; height: 36px; background: rgba(59, 130, 246, 0.1); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; color: var(--accent); }
+        .action-card-title { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+        .action-card-desc { font-size: 11px; color: var(--text-muted); }
+
+        /* Two columns */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+        /* Charts */
+        .chart-container { height: 280px; position: relative; }
+        .chart-bar-group { display: flex; align-items: flex-end; gap: 4px; height: 100%; }
+        .chart-wrapper { display: flex; flex-direction: column; height: 100%; }
+        .chart-with-yaxis { display: flex; height: 100%; }
+        .chart-yaxis { width: 50px; display: flex; flex-direction: column; justify-content: space-between; padding: 10px 8px 10px 0; text-align: right; }
+        .chart-yaxis-label { font-size: 9px; color: var(--text-muted); }
+        .chart-main { flex: 1; display: flex; flex-direction: column; }
+        .chart-area { flex: 1; display: flex; align-items: flex-end; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border-color); position: relative; }
+        .chart-area::before { content: ''; position: absolute; left: 0; right: 0; top: 10px; bottom: 0; background: repeating-linear-gradient(to bottom, transparent, transparent calc(25% - 1px), var(--border-subtle) calc(25% - 1px), var(--border-subtle) 25%); pointer-events: none; }
+        .chart-labels { display: flex; gap: 8px; padding-top: 8px; }
+        .chart-bar-container { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; z-index: 1; }
+        .chart-bars { display: flex; gap: 3px; align-items: flex-end; height: 100%; width: 100%; justify-content: center; }
+        .chart-bar { width: 16px; border-radius: 3px 3px 0 0; transition: all 0.3s ease; min-height: 2px; }
+        .chart-bar.paid { background: var(--accent); }
+        .chart-bar.reserve { background: var(--warning); }
+        .chart-bar.claims { background: var(--success); }
+        .chart-bar:hover { opacity: 0.8; transform: scaleY(1.02); }
+        .chart-label { font-size: 10px; color: var(--text-muted); text-align: center; white-space: nowrap; }
+        .chart-legend { display: flex; gap: 16px; justify-content: center; margin-top: 12px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+        .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+        .legend-dot.paid { background: var(--accent); }
+        .legend-dot.reserve { background: var(--warning); }
+        .legend-dot.claims { background: var(--success); }
+
+        /* Line Chart */
+        .line-chart-container { position: relative; min-height: 280px; }
+        .line-chart-svg { display: block; }
+        .line-chart-grid line { stroke: var(--border-color); stroke-dasharray: 3 3; }
+        .line-chart-axis text { fill: var(--text-muted); font-size: 10px; }
+        .line-chart-line { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: stroke-width 0.15s, opacity 0.15s; }
+        .line-chart-tooltip { position: fixed; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 10px 14px; font-size: 12px; pointer-events: none; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.5); backdrop-filter: blur(8px); min-width: 140px; transform: translateY(-100%); }
+        .line-chart-tooltip .tooltip-header { font-weight: 600; color: var(--text-primary); margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border-subtle); }
+        .line-chart-tooltip .tooltip-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+        .line-chart-tooltip .tooltip-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+        .line-chart-tooltip .tooltip-label { color: var(--text-secondary); flex: 1; }
+        .line-chart-tooltip .tooltip-value { font-weight: 600; font-family: 'SF Mono', Monaco, monospace; color: var(--text-primary); }
+        .chart-tooltip { position: fixed; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 10px 14px; font-size: 12px; pointer-events: none; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.5); backdrop-filter: blur(8px); min-width: 160px; max-width: 220px; }
+        .chart-tooltip .tooltip-title { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+        .chart-tooltip .tooltip-content { color: var(--text-secondary); }
+        .line-chart-legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+        .line-chart-legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-secondary); padding: 2px 6px; border-radius: var(--radius); }
+        .line-chart-legend-item:hover { background: var(--bg-hover); }
+        .line-chart-legend-dot { width: 12px; height: 3px; border-radius: 2px; }
+
+        /* Multi Select Dropdown */
+        .multi-select-container { position: relative; }
+        .multi-select-trigger { display: flex; align-items: center; gap: 6px; padding: 7px 12px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius); cursor: pointer; min-height: 34px; flex-wrap: wrap; }
+        .multi-select-trigger:hover { border-color: var(--text-muted); }
+        .multi-select-trigger.active { border-color: var(--accent); }
+        .multi-select-placeholder { color: var(--text-muted); font-size: 12px; }
+        .multi-select-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: rgba(59, 130, 246, 0.15); border-radius: 4px; font-size: 11px; color: var(--accent); }
+        .multi-select-tag-remove { cursor: pointer; opacity: 0.7; }
+        .multi-select-tag-remove:hover { opacity: 1; }
+        .multi-select-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius); max-height: 200px; overflow-y: auto; z-index: 9998; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .multi-select-dropdown.show { display: block; }
+        .multi-select-option { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; }
+        .multi-select-option:hover { background: var(--bg-hover); }
+        .multi-select-option.selected { background: rgba(59, 130, 246, 0.1); }
+        .multi-select-option input { accent-color: var(--accent); }
+        .multi-select-actions { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border-color); }
+
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); }
+            .main { margin-left: 0; }
+            .stats-grid, .two-col { grid-template-columns: 1fr; }
+            .actions-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>Cashflow Analysis</h1>
+                <span>Actuarial Scenario Tool</span>
+            </div>
+
+            <nav class="nav">
+                <div class="nav-section">
+                    <div class="nav-label">Navigation</div>
+                    <button class="nav-btn active" data-page="dashboard" onclick="showPage('dashboard')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                        Dashboard
+                    </button>
+                    <button class="nav-btn" data-page="scenarios" onclick="showPage('scenarios')" disabled id="scenariosPageBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                        Scenarios
+                        <span class="badge" id="scenarioCount">0</span>
+                    </button>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-label">Downloads</div>
+                    <button class="nav-btn" id="downloadBaseBtn" onclick="downloadFile('base_cashflow.xlsx')" disabled>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        Base Cashflow
+                    </button>
+                    <button class="nav-btn" id="downloadCompBtn" onclick="createComparison()" disabled>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        Comparison Excel
+                    </button>
+                </div>
+            </nav>
+
+            <div class="sidebar-stats" id="sidebarStats" style="display: none;">
+                <div class="stat-row">
+                    <span class="stat-label">Records</span>
+                    <span class="stat-value" id="statRows">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Claims</span>
+                    <span class="stat-value" id="statClaims">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">202409 Paid</span>
+                    <span class="stat-value" id="statPaid">-</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main -->
+        <main class="main">
+            <header class="header">
+                <div class="header-title" id="headerTitle">Dashboard</div>
+                <div id="headerActions"></div>
+            </header>
+
+            <div class="content">
+                <!-- Dashboard Page -->
+                <div class="page active" id="dashboardPage">
+                    <!-- Welcome - Before Data Load -->
+                    <div id="welcomeSection">
+                        <div class="card">
+                            <div class="card-body" style="text-align: center; padding: 48px;">
+                                <div style="width: 64px; height: 64px; background: var(--bg-tertiary); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; color: var(--accent);">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                                </div>
+                                <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">Cashflow Pattern Analysis</h2>
+                                <p style="font-size: 13px; color: var(--text-muted); max-width: 400px; margin: 0 auto 24px;">Upload your data to analyze cashflow patterns and create what-if scenarios.</p>
+
+                                <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()" style="max-width: 400px; margin: 0 auto;">
+                                    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileSelect(event)">
+                                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                                    </svg>
+                                    <div class="upload-title">Click to upload or drag & drop</div>
+                                    <div class="upload-desc">CSV or Excel files</div>
+                                </div>
+
+                                <div id="fileInfo" style="display: none; margin-top: 16px;">
+                                    <div style="display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--bg-tertiary); border-radius: var(--radius);">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                                        <span id="fileName" style="font-size: 13px;">-</span>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" width="16" height="16"><path d="M22 11.08V12a10 10 0 11-5.93-9.14M22 4L12 14.01l-3-3"/></svg>
+                                    </div>
+                                    <div style="margin-top: 16px;">
+                                        <button class="btn btn-primary" onclick="processData()">
+                                            Process Data
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard Content - After Data Load -->
+                    <div id="dashboardContent" style="display: none;">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-card-label">Total Records</div>
+                                <div class="stat-card-value" id="dashStatRows">-</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-card-label">Unique Claims</div>
+                                <div class="stat-card-value" id="dashStatClaims">-</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-card-label">202409 Paid</div>
+                                <div class="stat-card-value"><span id="dashStatPaid">-</span><span class="stat-card-unit">M TL</span></div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-card-label">202409 Reserve</div>
+                                <div class="stat-card-value"><span id="dashStatOS">-</span><span class="stat-card-unit">M TL</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Charts Row -->
+                        <div class="two-col">
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-title">Paid & Reserve by Accident Year</div>
+                                </div>
+                                <div class="card-body">
+                                    <div id="yearChart" class="chart-container"></div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-title">Claims Distribution by Year</div>
+                                </div>
+                                <div class="card-body">
+                                    <div id="claimDistChart" class="chart-container"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Summary Table -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">202409 Summary by Accident Year</div>
+                            </div>
+                            <div class="card-body" style="padding: 0;">
+                                <div class="table-container">
+                                    <table class="data-table" id="summaryTable">
+                                        <thead>
+                                            <tr>
+                                                <th>Accident Year</th>
+                                                <th class="num">Paid TL</th>
+                                                <th class="num">Reserve TL</th>
+                                                <th class="num">Total Incurred</th>
+                                                <th class="num">Claims</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="summaryTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scenarios Page -->
+                <div class="page" id="scenariosPage">
+                    <div class="two-col" style="margin-bottom: 20px;">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">Scenarios</div>
+                                <button class="btn btn-primary btn-sm" onclick="openScenarioModal()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 5v14M5 12h14"/></svg>
+                                    New Scenario
+                                </button>
+                            </div>
+                            <div id="allScenarios" class="card-body" style="padding: 0; max-height: 400px; overflow-y: auto;"></div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">Scenario Analysis</div>
+                                <select class="form-input form-select" id="analysisScenarioSelect" style="width: 180px;" onchange="loadScenarioAnalysis()">
+                                    <option value="">Select scenario...</option>
+                                </select>
+                            </div>
+                            <div class="card-body" id="scenarioAnalysisContent">
+                                <div class="empty-state">
+                                    <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div>
+                                    <div class="empty-title">Select a scenario</div>
+                                    <div class="empty-desc">View pattern analysis and comparison with base</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quarterly Cashflow Line Chart -->
+                    <div class="card" id="quarterlyChartCard">
+                        <div class="card-header">
+                            <div class="card-title">Quarterly Cashflow Pattern Comparison</div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 11px; color: var(--text-muted);">Filter Years:</span>
+                                <div class="multi-select-container" id="quarterlyYearFilter" style="min-width: 200px;"></div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="quarterlyLineChart" class="line-chart-container">
+                                <div class="empty-state">
+                                    <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M3 3v18h18M18 17l-5-5-4 4-3-3"/></svg></div>
+                                    <div class="empty-title">No data yet</div>
+                                    <div class="empty-desc">Process data and create scenarios to see quarterly comparison</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Scenario Modal -->
+    <div class="modal-overlay" id="scenarioModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">New Scenario</div>
+                <button class="modal-close" onclick="closeModal('scenarioModal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="tabs">
+                    <button class="tab active" data-tab="payment" onclick="switchScenarioTab('payment')">Payment Reduction</button>
+                    <button class="tab" data-tab="reserve" onclick="switchScenarioTab('reserve')">Reserve Payment</button>
+                </div>
+
+                <div id="scenarioPaymentTab" class="tab-content active">
+                    <div class="form-group">
+                        <label class="form-label">Scenario Name</label>
+                        <input type="text" class="form-input" id="paymentName" placeholder="e.g., test_2024">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Apply to</label>
+                        <select class="form-input form-select" id="paymentType" onchange="togglePaymentForm()">
+                            <option value="year">Accident Years (Bodily only)</option>
+                            <option value="claim">Specific Claims</option>
+                        </select>
+                    </div>
+                    <div id="paymentYearForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Years</label>
+                                <div class="multi-select-container" id="paymentYearsSelect"></div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Reduction %</label>
+                                <input type="number" class="form-input" id="paymentPct" min="0" max="100" value="20">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="paymentClaimForm" style="display: none;">
+                        <div class="form-group">
+                            <label class="form-label">Selected Claims</label>
+                            <div class="chips" id="paymentClaimsChips">
+                                <span style="color: var(--text-muted); font-size: 12px;">No claims selected</span>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" style="margin-top: 10px;" onclick="openClaimPicker('payment')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 5v14M5 12h14"/></svg>
+                                Select Claims
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="scenarioReserveTab" class="tab-content">
+                    <div class="form-group">
+                        <label class="form-label">Scenario Name</label>
+                        <input type="text" class="form-input" id="reserveName" placeholder="e.g., reserve_test">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Apply to</label>
+                        <select class="form-input form-select" id="reserveType" onchange="toggleReserveForm()">
+                            <option value="year">Accident Years (Bodily only)</option>
+                            <option value="claim">Specific Claims</option>
+                        </select>
+                    </div>
+                    <div id="reserveYearForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Years</label>
+                                <div class="multi-select-container" id="reserveYearsSelect"></div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Payment %</label>
+                                <input type="number" class="form-input" id="reservePct" min="0" max="100" value="100">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="reserveClaimForm" style="display: none;">
+                        <div class="form-group">
+                            <label class="form-label">Selected Claims</label>
+                            <div class="chips" id="reserveClaimsChips">
+                                <span style="color: var(--text-muted); font-size: 12px;">No claims selected</span>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" style="margin-top: 10px;" onclick="openClaimPicker('reserve')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 5v14M5 12h14"/></svg>
+                                Select Claims
+                            </button>
+                        </div>
+                        <div class="form-hint">Selected claims' reserves will be fully paid</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('scenarioModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="createScenario()">Create Scenario</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Claim Picker Modal -->
+    <div class="modal-overlay" id="claimPickerModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <div class="modal-title">Select Claims</div>
+                <button class="modal-close" onclick="closeModal('claimPickerModal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="filter-bar">
+                    <input type="text" class="filter-input" id="claimSearchInput" placeholder="Search claim number..." oninput="debounceClaimSearch()" style="width: 200px;">
+                    <select class="filter-input form-select" id="claimYearFilter" onchange="loadClaimTable()">
+                        <option value="">All Years</option>
+                    </select>
+                    <select class="filter-input form-select" id="claimMBFilter" onchange="loadClaimTable()">
+                        <option value="">All Types</option>
+                    </select>
+                    <button class="btn btn-sm btn-ghost" onclick="clearClaimFilters()">Clear</button>
+                    <div style="margin-left: auto; font-size: 12px; color: var(--text-muted);">
+                        <span id="selectedClaimCount">0</span> selected
+                    </div>
+                </div>
+
+                <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th class="checkbox-cell"><input type="checkbox" id="claimSelectAll" onchange="toggleAllClaims()"></th>
+                                <th>Claim No</th>
+                                <th>Year</th>
+                                <th>Type</th>
+                                <th class="num">Paid TL</th>
+                                <th class="num">Reserve TL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="claimTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="pagination">
+                    <span id="claimPageInfo">-</span>
+                    <div class="pagination-btns">
+                        <button class="btn btn-sm btn-ghost" id="claimPrevBtn" onclick="changeClaimPage(-1)" disabled>Prev</button>
+                        <button class="btn btn-sm btn-ghost" id="claimNextBtn" onclick="changeClaimPage(1)" disabled>Next</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('claimPickerModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmClaimSelection()">
+                    Confirm Selection (<span id="confirmClaimCount">0</span>)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // State
+        let dataLoaded = false;
+        let scenarios = [];
+        let currentScenarioTab = 'payment';
+        let paymentSelectedClaims = new Set();
+        let reserveSelectedClaims = new Set();
+        let claimPickerTarget = 'payment';
+        let tempSelectedClaims = new Set();
+        let claimPage = 1;
+        let claimTotalPages = 1;
+        let claimSearchTimeout = null;
+        let baseStats = null;
+        let availableYears = [];
+        let multiSelectInstances = {};
+
+        // Utils
+        const $ = id => document.getElementById(id);
+        const fmt = n => new Intl.NumberFormat('tr-TR').format(n);
+
+        // Multi-Select Component
+        function createMultiSelect(containerId, options, placeholder = 'Select...', onChange = null) {
+            const container = $(containerId);
+            if (!container) return null;
+
+            const instance = {
+                id: containerId,
+                selected: new Set(),
+                options: options,
+                onChange: onChange,
+                isOpen: false
+            };
+
+            // Sadece trigger kısmını güncelle (seçili öğeleri göster)
+            function updateTrigger() {
+                const trigger = container.querySelector('.multi-select-trigger');
+                if (!trigger) return;
+                
+                const selectedArr = Array.from(instance.selected);
+                trigger.innerHTML = selectedArr.length > 0
+                    ? selectedArr.slice(0, 3).map(v => `<span class="multi-select-tag">${v}<span class="multi-select-tag-remove" data-value="${v}">&times;</span></span>`).join('') +
+                      (selectedArr.length > 3 ? `<span class="multi-select-tag">+${selectedArr.length - 3}</span>` : '')
+                    : `<span class="multi-select-placeholder">${placeholder}</span>`;
+            }
+
+            // Sadece checkbox durumlarını güncelle
+            function updateCheckboxes() {
+                const dropdown = container.querySelector('.multi-select-dropdown');
+                if (!dropdown) return;
+                
+                dropdown.querySelectorAll('.multi-select-option').forEach(opt => {
+                    const val = opt.dataset.value;
+                    const isSelected = instance.selected.has(val);
+                    opt.classList.toggle('selected', isSelected);
+                    const checkbox = opt.querySelector('input[type="checkbox"]');
+                    if (checkbox) checkbox.checked = isSelected;
+                });
+            }
+
+            // İlk render - tam HTML oluştur
+            function render() {
+                const selectedArr = Array.from(instance.selected);
+                const tagsHtml = selectedArr.length > 0
+                    ? selectedArr.slice(0, 3).map(v => `<span class="multi-select-tag">${v}<span class="multi-select-tag-remove" data-value="${v}">&times;</span></span>`).join('') +
+                      (selectedArr.length > 3 ? `<span class="multi-select-tag">+${selectedArr.length - 3}</span>` : '')
+                    : `<span class="multi-select-placeholder">${placeholder}</span>`;
+
+                const optionsHtml = instance.options.map(opt =>
+                    `<div class="multi-select-option ${instance.selected.has(opt) ? 'selected' : ''}" data-value="${opt}">
+                        <input type="checkbox" ${instance.selected.has(opt) ? 'checked' : ''}>
+                        <span>${opt}</span>
+                    </div>`
+                ).join('');
+
+                container.innerHTML = `
+                    <div class="multi-select-trigger" tabindex="0">${tagsHtml}</div>
+                    <div class="multi-select-dropdown">
+                        ${optionsHtml}
+                        <div class="multi-select-actions">
+                            <button class="btn btn-sm btn-ghost" data-action="clear">Clear All</button>
+                            <button class="btn btn-sm btn-ghost" data-action="all">Select All</button>
+                        </div>
+                    </div>
+                `;
+
+                setupEventListeners();
+            }
+
+            function setupEventListeners() {
+                const trigger = container.querySelector('.multi-select-trigger');
+                const dropdown = container.querySelector('.multi-select-dropdown');
+
+                trigger.onclick = (e) => {
+                    e.stopPropagation();
+                    if (e.target.classList.contains('multi-select-tag-remove')) {
+                        instance.selected.delete(e.target.dataset.value);
+                        updateTrigger();
+                        updateCheckboxes();
+                        if (instance.onChange) instance.onChange(Array.from(instance.selected));
+                        return;
+                    }
+                    
+                    // Diğer açık dropdown'ları kapat
+                    document.querySelectorAll('.multi-select-dropdown.show').forEach(d => {
+                        if (d !== dropdown) {
+                            d.classList.remove('show');
+                            d.parentElement.querySelector('.multi-select-trigger')?.classList.remove('active');
+                        }
+                    });
+                    
+                    instance.isOpen = !instance.isOpen;
+                    dropdown.classList.toggle('show', instance.isOpen);
+                    trigger.classList.toggle('active', instance.isOpen);
+                    
+                    // Modal içindeyse pozisyonu hesapla
+                    if (instance.isOpen && container.closest('.modal')) {
+                        const triggerRect = trigger.getBoundingClientRect();
+                        dropdown.style.position = 'fixed';
+                        dropdown.style.left = triggerRect.left + 'px';
+                        dropdown.style.top = (triggerRect.bottom + 4) + 'px';
+                        dropdown.style.width = triggerRect.width + 'px';
+                        dropdown.style.right = 'auto';
+                    }
+                };
+
+                dropdown.querySelectorAll('.multi-select-option').forEach(opt => {
+                    opt.onclick = (e) => {
+                        e.stopPropagation(); // Dropdown'un kapanmasını engelle
+                        const val = opt.dataset.value;
+                        if (instance.selected.has(val)) instance.selected.delete(val);
+                        else instance.selected.add(val);
+                        
+                        // Sadece gerekli kısımları güncelle, dropdown açık kalsın
+                        updateTrigger();
+                        updateCheckboxes();
+                        if (instance.onChange) instance.onChange(Array.from(instance.selected));
+                    };
+                });
+
+                dropdown.querySelector('[data-action="clear"]').onclick = (e) => {
+                    e.stopPropagation();
+                    instance.selected.clear();
+                    updateTrigger();
+                    updateCheckboxes();
+                    if (instance.onChange) instance.onChange([]);
+                };
+
+                dropdown.querySelector('[data-action="all"]').onclick = (e) => {
+                    e.stopPropagation();
+                    instance.options.forEach(o => instance.selected.add(o));
+                    updateTrigger();
+                    updateCheckboxes();
+                    if (instance.onChange) instance.onChange(Array.from(instance.selected));
+                };
+            }
+
+            // Close on outside click (sadece bir kez ekle)
+            document.addEventListener('click', (e) => {
+                if (!container.contains(e.target)) {
+                    const dropdown = container.querySelector('.multi-select-dropdown');
+                    const trigger = container.querySelector('.multi-select-trigger');
+                    if (dropdown && trigger) {
+                        instance.isOpen = false;
+                        dropdown.classList.remove('show');
+                        trigger.classList.remove('active');
+                    }
+                }
+            });
+
+            instance.render = render;
+            instance.getSelected = () => Array.from(instance.selected);
+            instance.setSelected = (vals) => { instance.selected = new Set(vals); updateTrigger(); updateCheckboxes(); };
+            instance.updateOptions = (opts) => { instance.options = opts; render(); };
+
+            render();
+            multiSelectInstances[containerId] = instance;
+            return instance;
+        }
+
+        function showLoading(show) { $('loadingOverlay').classList.toggle('active', show); }
+
+        function toast(msg, type = 'success') {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.innerHTML = `
+                <svg class="toast-icon ${type}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="${type === 'success' ? 'M22 11.08V12a10 10 0 11-5.93-9.14M22 4L12 14.01l-3-3' : 'M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'}"/>
+                </svg>
+                <span class="toast-message">${msg}</span>
+            `;
+            $('toastContainer').appendChild(t);
+            setTimeout(() => t.remove(), 3500);
+        }
+
+        function parseYears(input) {
+            input = input.trim();
+            if (input.includes('-') && !input.includes(',')) {
+                const [s, e] = input.split('-').map(y => parseInt(y.trim()));
+                return Array.from({length: e - s + 1}, (_, i) => s + i);
+            }
+            return input.split(',').map(y => parseInt(y.trim()));
+        }
+
+        function openModal(id) { $(id).classList.add('active'); }
+        function closeModal(id) { $(id).classList.remove('active'); }
+
+        // Page Navigation
+        function showPage(pageName) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            $(pageName + 'Page').classList.add('active');
+            document.querySelectorAll('.nav-btn[data-page]').forEach(btn => btn.classList.toggle('active', btn.dataset.page === pageName));
+            $('headerTitle').textContent = { dashboard: 'Dashboard', scenarios: 'Scenarios' }[pageName] || 'Dashboard';
+
+            if (pageName === 'scenarios' && dataLoaded) {
+                loadQuarterlyChart();
+            }
+        }
+
+        // File Upload
+        const uploadArea = $('uploadArea');
+        uploadArea.ondragover = e => { e.preventDefault(); uploadArea.classList.add('dragover'); };
+        uploadArea.ondragleave = () => uploadArea.classList.remove('dragover');
+        uploadArea.ondrop = e => { e.preventDefault(); uploadArea.classList.remove('dragover'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); };
+
+        function handleFileSelect(e) { if (e.target.files.length) handleFile(e.target.files[0]); }
+
+        async function handleFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            showLoading(true);
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.success) {
+                    $('fileName').textContent = data.filename;
+                    $('fileInfo').style.display = 'block';
+                    uploadArea.style.display = 'none';
+                    toast('File uploaded');
+                } else { toast(data.error, 'error'); }
+            } catch (e) { toast('Upload failed', 'error'); }
+            showLoading(false);
+        }
+
+        async function processData() {
+            showLoading(true);
+            try {
+                const res = await fetch('/api/load-data', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    dataLoaded = true;
+                    baseStats = data.stats;
+                    availableYears = data.stats.years || [];
+
+                    $('welcomeSection').style.display = 'none';
+                    $('dashboardContent').style.display = 'block';
+                    $('sidebarStats').style.display = 'block';
+                    $('scenariosPageBtn').disabled = false;
+                    $('downloadBaseBtn').disabled = false;
+
+                    $('statRows').textContent = fmt(data.stats.total_rows);
+                    $('statClaims').textContent = fmt(data.stats.unique_claims);
+                    $('statPaid').textContent = (data.stats.total_paid_202409 / 1e6).toFixed(1) + 'M';
+
+                    // Initialize multi-select dropdowns
+                    initializeYearSelects();
+
+                    $('dashStatRows').textContent = fmt(data.stats.total_rows);
+                    $('dashStatClaims').textContent = fmt(data.stats.unique_claims);
+                    $('dashStatPaid').textContent = (data.stats.total_paid_202409 / 1e6).toFixed(1);
+                    $('dashStatOS').textContent = (data.stats.total_os_202409 / 1e6).toFixed(1);
+
+                    loadScenarios();
+                    loadDashboardCharts();
+                    toast('Data processed successfully');
+                } else { toast(data.error, 'error'); }
+            } catch (e) { toast('Processing failed', 'error'); }
+            showLoading(false);
+        }
+
+        // Scenario Modal
+        function openScenarioModal(tab = 'payment') {
+            switchScenarioTab(tab);
+            openModal('scenarioModal');
+        }
+
+        function switchScenarioTab(tab) {
+            currentScenarioTab = tab;
+            document.querySelectorAll('#scenarioModal .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            $('scenarioPaymentTab').classList.toggle('active', tab === 'payment');
+            $('scenarioReserveTab').classList.toggle('active', tab === 'reserve');
+        }
+
+        function togglePaymentForm() {
+            const isYear = $('paymentType').value === 'year';
+            $('paymentYearForm').style.display = isYear ? 'block' : 'none';
+            $('paymentClaimForm').style.display = isYear ? 'none' : 'block';
+        }
+
+        function toggleReserveForm() {
+            const isYear = $('reserveType').value === 'year';
+            $('reserveYearForm').style.display = isYear ? 'block' : 'none';
+            $('reserveClaimForm').style.display = isYear ? 'none' : 'block';
+        }
+
+        // Claim Picker
+        function openClaimPicker(target) {
+            claimPickerTarget = target;
+            tempSelectedClaims = new Set(target === 'payment' ? paymentSelectedClaims : reserveSelectedClaims);
+            claimPage = 1;
+            loadClaimTable();
+            openModal('claimPickerModal');
+        }
+
+        function debounceClaimSearch() {
+            clearTimeout(claimSearchTimeout);
+            claimSearchTimeout = setTimeout(() => { claimPage = 1; loadClaimTable(); }, 300);
+        }
+
+        async function loadClaimTable() {
+            const search = $('claimSearchInput').value;
+            const year = $('claimYearFilter').value;
+            const mb = $('claimMBFilter').value;
+
+            try {
+                const res = await fetch(`/api/data/table?page=${claimPage}&per_page=50&search=${encodeURIComponent(search)}&year=${year}&mb_final=${mb}`);
+                const data = await res.json();
+                if (data.success) {
+                    renderClaimTable(data.data);
+                    updateClaimPagination(data.pagination);
+                    updateClaimFilters(data.filters);
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function renderClaimTable(records) {
+            if (records.length === 0) {
+                $('claimTableBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">No data</td></tr>';
+                return;
+            }
+            $('claimTableBody').innerHTML = records.map(r => `
+                <tr class="${tempSelectedClaims.has(r.CLAIM_NO) ? 'selected' : ''}" data-claim="${r.CLAIM_NO}">
+                    <td class="checkbox-cell"><input type="checkbox" ${tempSelectedClaims.has(r.CLAIM_NO) ? 'checked' : ''} onchange="toggleClaim('${r.CLAIM_NO}')"></td>
+                    <td>${r.CLAIM_NO}</td>
+                    <td>${r.ORIGIN_YEAR}</td>
+                    <td>${r.MB_FINAL || '-'}</td>
+                    <td class="num">${r.PAID_TL_FORMATTED}</td>
+                    <td class="num">${r.OS_TL_FORMATTED}</td>
+                </tr>
+            `).join('');
+            updateSelectedCount();
+        }
+
+        function updateClaimPagination(p) {
+            claimPage = p.page;
+            claimTotalPages = p.total_pages;
+            $('claimPageInfo').textContent = `${(p.page - 1) * p.per_page + 1}-${Math.min(p.page * p.per_page, p.total_records)} of ${fmt(p.total_records)}`;
+            $('claimPrevBtn').disabled = claimPage <= 1;
+            $('claimNextBtn').disabled = claimPage >= claimTotalPages;
+        }
+
+        function updateClaimFilters(filters) {
+            const yearSel = $('claimYearFilter');
+            const mbSel = $('claimMBFilter');
+            if (yearSel.options.length <= 1) filters.years.forEach(y => yearSel.add(new Option(y, y)));
+            if (mbSel.options.length <= 1) filters.mb_finals.forEach(m => mbSel.add(new Option(m, m)));
+        }
+
+        function changeClaimPage(delta) { claimPage += delta; loadClaimTable(); }
+
+        function clearClaimFilters() {
+            $('claimSearchInput').value = '';
+            $('claimYearFilter').value = '';
+            $('claimMBFilter').value = '';
+            claimPage = 1;
+            loadClaimTable();
+        }
+
+        function toggleAllClaims() {
+            const checked = $('claimSelectAll').checked;
+            document.querySelectorAll('#claimTableBody input[type="checkbox"]').forEach(cb => {
+                const claim = cb.closest('tr').dataset.claim;
+                if (checked) tempSelectedClaims.add(claim);
+                else tempSelectedClaims.delete(claim);
+                cb.checked = checked;
+                cb.closest('tr').classList.toggle('selected', checked);
+            });
+            updateSelectedCount();
+        }
+
+        function toggleClaim(no) {
+            if (tempSelectedClaims.has(no)) tempSelectedClaims.delete(no);
+            else tempSelectedClaims.add(no);
+            const row = document.querySelector(`tr[data-claim="${no}"]`);
+            if (row) {
+                row.classList.toggle('selected', tempSelectedClaims.has(no));
+                row.querySelector('input').checked = tempSelectedClaims.has(no);
+            }
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            $('selectedClaimCount').textContent = tempSelectedClaims.size;
+            $('confirmClaimCount').textContent = tempSelectedClaims.size;
+        }
+
+        function confirmClaimSelection() {
+            if (claimPickerTarget === 'payment') {
+                paymentSelectedClaims = new Set(tempSelectedClaims);
+                updateClaimChips('payment', paymentSelectedClaims);
+            } else {
+                reserveSelectedClaims = new Set(tempSelectedClaims);
+                updateClaimChips('reserve', reserveSelectedClaims);
+            }
+            closeModal('claimPickerModal');
+            toast(`${tempSelectedClaims.size} claims selected`);
+        }
+
+        function updateClaimChips(type, claims) {
+            const container = $(type + 'ClaimsChips');
+            if (claims.size === 0) {
+                container.innerHTML = '<span style="color: var(--text-muted); font-size: 12px;">No claims selected</span>';
+            } else {
+                const arr = Array.from(claims);
+                container.innerHTML = arr.slice(0, 5).map(c => `<span class="chip">${c}</span>`).join('') + (arr.length > 5 ? `<span class="chip">+${arr.length - 5} more</span>` : '');
+            }
+        }
+
+        function removeClaimChip(type, claim) {
+            if (type === 'payment') { paymentSelectedClaims.delete(claim); updateClaimChips('payment', paymentSelectedClaims); }
+            else { reserveSelectedClaims.delete(claim); updateClaimChips('reserve', reserveSelectedClaims); }
+        }
+
+        // Create Scenario
+        async function createScenario() {
+            const isPayment = currentScenarioTab === 'payment';
+            const name = isPayment ? $('paymentName').value.trim() : $('reserveName').value.trim();
+            if (!name) { toast('Enter scenario name', 'error'); return; }
+
+            const applyType = isPayment ? $('paymentType').value : $('reserveType').value;
+            let requestData = { name };
+
+            if (applyType === 'year') {
+                // Get years from multi-select
+                const selectId = isPayment ? 'paymentYearsSelect' : 'reserveYearsSelect';
+                const selectedYears = multiSelectInstances[selectId]?.getSelected() || [];
+                if (selectedYears.length === 0) { toast('Select at least one year', 'error'); return; }
+                requestData.type = isPayment ? 'payment_reduction_year' : 'reserve_payment_year';
+                requestData.years = selectedYears.map(y => parseInt(y));
+                if (isPayment) requestData.reduction_pct = parseFloat($('paymentPct').value);
+                else requestData.payment_pct = parseFloat($('reservePct').value);
+            } else {
+                const claims = isPayment ? paymentSelectedClaims : reserveSelectedClaims;
+                if (claims.size === 0) { toast('Select claims', 'error'); return; }
+                requestData.type = isPayment ? 'payment_reduction_file' : 'reserve_payment_file';
+                requestData.claim_numbers = Array.from(claims);
+            }
+
+            showLoading(true);
+            try {
+                const res = await fetch('/api/scenario/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    toast(`Scenario "${name}" created`);
+                    closeModal('scenarioModal');
+                    if (isPayment) {
+                        $('paymentName').value = '';
+                        paymentSelectedClaims.clear();
+                        updateClaimChips('payment', paymentSelectedClaims);
+                        if (multiSelectInstances['paymentYearsSelect']) multiSelectInstances['paymentYearsSelect'].setSelected([]);
+                    } else {
+                        $('reserveName').value = '';
+                        reserveSelectedClaims.clear();
+                        updateClaimChips('reserve', reserveSelectedClaims);
+                        if (multiSelectInstances['reserveYearsSelect']) multiSelectInstances['reserveYearsSelect'].setSelected([]);
+                    }
+                    loadScenarios();
+                } else { toast(data.error, 'error'); }
+            } catch (e) { toast('Failed to create scenario', 'error'); }
+            showLoading(false);
+        }
+
+        // Load Scenarios
+        async function loadScenarios() {
+            try {
+                const res = await fetch('/api/scenarios');
+                const data = await res.json();
+                if (data.success) {
+                    scenarios = data.scenarios;
+                    renderScenarios();
+                    updateScenarioSelect();
+                    // Quarterly chart güncelle
+                    if (dataLoaded) {
+                        loadQuarterlyChart();
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function renderScenarios() {
+            $('scenarioCount').textContent = scenarios.length;
+            $('downloadCompBtn').disabled = scenarios.length === 0;
+
+            const html = scenarios.length === 0 ? `
+                <div class="empty-state">
+                    <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
+                    <div class="empty-title">No scenarios yet</div>
+                    <div class="empty-desc">Create scenarios to analyze patterns</div>
+                </div>
+            ` : `
+                <div class="scenario-list" style="padding: 16px;">
+                    ${scenarios.map(s => `
+                        <div class="scenario-item">
+                            <div class="scenario-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
+                            <div class="scenario-info">
+                                <div class="scenario-name">${s.name}</div>
+                                <div class="scenario-desc">${s.description}</div>
+                            </div>
+                            <div class="scenario-actions">
+                                <button class="btn btn-sm btn-ghost" onclick="downloadFile('${s.file}')" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteScenario('${s.name}')" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            $('allScenarios').innerHTML = html;
+        }
+
+        function updateScenarioSelect() {
+            // Analysis select güncelle
+            const analysisSel = $('analysisScenarioSelect');
+            if (analysisSel) {
+                analysisSel.innerHTML = '<option value="">Select scenario...</option>' + scenarios.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+            }
+        }
+
+        let currentAnalysisScenario = null;
+
+        async function loadScenarioAnalysis() {
+            const scenarioName = $('analysisScenarioSelect').value;
+            if (!scenarioName) {
+                $('scenarioAnalysisContent').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div>
+                        <div class="empty-title">Select a scenario</div>
+                        <div class="empty-desc">View pattern analysis and comparison with base</div>
+                    </div>`;
+                $('scenarioComparisonCard').style.display = 'none';
+                return;
+            }
+
+            currentAnalysisScenario = scenarioName;
+
+            try {
+                const res = await fetch(`/api/scenario/analysis/${scenarioName}`);
+                const data = await res.json();
+
+                if (data.success) {
+                    renderScenarioAnalysis(data);
+                } else {
+                    $('scenarioAnalysisContent').innerHTML = `<div class="empty-state"><div class="empty-desc">${data.error}</div></div>`;
+                }
+            } catch (e) {
+                console.error(e);
+                $('scenarioAnalysisContent').innerHTML = '<div class="empty-state"><div class="empty-desc">Failed to load analysis</div></div>';
+            }
+        }
+
+        function renderScenarioAnalysis(data) {
+            const s = data.summary;
+            const diffColor = s.difference < 0 ? 'var(--success)' : (s.difference > 0 ? 'var(--danger)' : 'var(--text-secondary)');
+            const diffSign = s.difference > 0 ? '+' : '';
+
+            $('scenarioAnalysisContent').innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div style="padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius);">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">Base Total Paid</div>
+                        <div style="font-size: 16px; font-weight: 600;">${(s.base_total / 1e6).toFixed(2)} M</div>
+                    </div>
+                    <div style="padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius);">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">Scenario Total Paid</div>
+                        <div style="font-size: 16px; font-weight: 600;">${(s.scenario_total / 1e6).toFixed(2)} M</div>
+                    </div>
+                </div>
+                <div style="margin-top: 12px; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius); text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 4px;">Difference</div>
+                    <div style="font-size: 24px; font-weight: 700; color: ${diffColor};">
+                        ${diffSign}${(s.difference / 1e6).toFixed(2)} M
+                    </div>
+                    <div style="font-size: 12px; color: ${diffColor};">${diffSign}${s.difference_pct.toFixed(2)}%</div>
+                </div>
+            `;
+        }
+
+        async function deleteScenario(name) {
+            if (!confirm(`Delete "${name}"?`)) return;
+            showLoading(true);
+            try {
+                const res = await fetch(`/api/scenario/delete/${name}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) { toast('Scenario deleted'); loadScenarios(); }
+                else { toast(data.error, 'error'); }
+            } catch (e) { toast('Delete failed', 'error'); }
+            showLoading(false);
+        }
+
+        async function createComparison() {
+            if (scenarios.length === 0) { toast('Create at least one scenario first', 'error'); return; }
+            showLoading(true);
+            try {
+                const res = await fetch('/api/comparison/create', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) { toast('Comparison Excel created'); setTimeout(() => downloadFile(data.file), 400); }
+                else { toast(data.error, 'error'); }
+            } catch (e) { toast('Export failed', 'error'); }
+            showLoading(false);
+        }
+
+        function downloadFile(filename) { window.location.href = `/api/download/${filename}`; }
+
+        // Tooltip pozisyonlama yardımcı fonksiyonu
+        function positionTooltip(tooltip, e) {
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const tooltipWidth = tooltipRect.width || 180;
+            const tooltipHeight = tooltipRect.height || 120;
+            
+            let left = e.clientX + 15;
+            let top = e.clientY - 15;
+            
+            // Sağ kenardan taşıyorsa sola al
+            if (left + tooltipWidth > viewportWidth - 10) {
+                left = e.clientX - tooltipWidth - 15;
+            }
+            
+            // Alt kenardan taşıyorsa yukarı al
+            if (top + tooltipHeight > viewportHeight - 10) {
+                top = viewportHeight - tooltipHeight - 10;
+            }
+            
+            // Üst kenardan taşıyorsa aşağı al
+            if (top < 10) {
+                top = 10;
+            }
+            
+            // Sol kenardan taşıyorsa sağa al
+            if (left < 10) {
+                left = 10;
+            }
+            
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        }
+
+        // Dashboard Charts
+        async function loadDashboardCharts() {
+            try {
+                const res = await fetch('/api/summary/by-year');
+                const data = await res.json();
+                if (data.success) {
+                    // Son 10 yıl için filtrele
+                    const last10Years = data.data.slice(-10);
+                    renderYearChart(last10Years);
+                    renderClaimDistChart(last10Years);
+                    renderSummaryTable(data.data); // Tablo tüm yılları göstersin
+                }
+            } catch (e) { console.error('Failed to load charts', e); }
+        }
+
+        function renderYearChart(data) {
+            const maxVal = Math.max(...data.map(d => d.paid + d.reserve));
+            const chartHeight = 220;
+            
+            // Y ekseni değerleri (milyon TL)
+            const maxValM = maxVal / 1e6;
+            const yAxisSteps = [maxValM, maxValM * 0.75, maxValM * 0.5, maxValM * 0.25, 0];
+
+            let html = `<div class="chart-wrapper">
+                <div class="chart-with-yaxis">
+                    <div class="chart-yaxis">
+                        ${yAxisSteps.map(v => `<div class="chart-yaxis-label">${v.toFixed(0)}M</div>`).join('')}
+                    </div>
+                    <div class="chart-main">
+                        <div class="chart-area">`;
+
+            data.forEach(d => {
+                const paidHeight = (d.paid / maxVal) * chartHeight;
+                const reserveHeight = (d.reserve / maxVal) * chartHeight;
+                const totalIncurred = d.paid + d.reserve;
+                html += `
+                    <div class="chart-bar-container" data-year="${d.year}" data-paid="${(d.paid/1e6).toFixed(2)}" data-reserve="${(d.reserve/1e6).toFixed(2)}" data-total="${(totalIncurred/1e6).toFixed(2)}">
+                        <div class="chart-bars">
+                            <div class="chart-bar paid" style="height: ${paidHeight}px;"></div>
+                            <div class="chart-bar reserve" style="height: ${reserveHeight}px;"></div>
+                        </div>
+                    </div>`;
+            });
+
+            html += `</div><div class="chart-labels">`;
+            data.forEach(d => {
+                html += `<div class="chart-bar-container"><span class="chart-label">${d.year}</span></div>`;
+            });
+
+            html += `</div>
+                    </div>
+                </div>
+                <div class="chart-legend">
+                    <div class="legend-item"><div class="legend-dot paid"></div>Paid</div>
+                    <div class="legend-item"><div class="legend-dot reserve"></div>Reserve</div>
+                </div>
+            </div>
+            <div class="chart-tooltip" id="yearChartTooltip" style="display: none;"></div>`;
+
+            $('yearChart').innerHTML = html;
+            setupYearChartTooltips();
+        }
+
+        function setupYearChartTooltips() {
+            const container = $('yearChart');
+            const tooltip = $('yearChartTooltip');
+            const bars = container.querySelectorAll('.chart-bar-container[data-year]');
+            
+            bars.forEach(bar => {
+                bar.addEventListener('mouseenter', (e) => {
+                    const year = bar.dataset.year;
+                    const paid = bar.dataset.paid;
+                    const reserve = bar.dataset.reserve;
+                    const total = bar.dataset.total;
+                    
+                    if (!year) return;
+                    
+                    tooltip.innerHTML = `
+                        <div class="tooltip-title">${year} Accident Year</div>
+                        <div class="tooltip-content">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                                <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--accent);"></span>
+                                <span style="color: var(--text-muted); flex: 1;">Paid:</span>
+                                <strong>${paid}M TL</strong>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 3px;">
+                                <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--warning);"></span>
+                                <span style="color: var(--text-muted); flex: 1;">Reserve:</span>
+                                <strong>${reserve}M TL</strong>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-subtle);">
+                                <span style="color: var(--text-muted); flex: 1;">Total Incurred:</span>
+                                <strong style="color: var(--accent);">${total}M TL</strong>
+                            </div>
+                        </div>
+                    `;
+                    tooltip.style.display = 'block';
+                    positionTooltip(tooltip, e);
+                    
+                    // Bar'ları vurgula
+                    bar.querySelectorAll('.chart-bar').forEach(b => b.style.opacity = '0.85');
+                });
+                
+                bar.addEventListener('mouseleave', () => {
+                    tooltip.style.display = 'none';
+                    bar.querySelectorAll('.chart-bar').forEach(b => b.style.opacity = '1');
+                });
+                
+                bar.addEventListener('mousemove', (e) => {
+                    positionTooltip(tooltip, e);
+                });
+            });
+        }
+
+        function renderClaimDistChart(data) {
+            const maxClaims = Math.max(...data.map(d => d.claims));
+            const chartHeight = 220;
+            
+            // Y ekseni değerleri
+            const yAxisSteps = [maxClaims, Math.round(maxClaims * 0.75), Math.round(maxClaims * 0.5), Math.round(maxClaims * 0.25), 0];
+
+            let html = `<div class="chart-wrapper">
+                <div class="chart-with-yaxis">
+                    <div class="chart-yaxis">
+                        ${yAxisSteps.map(v => `<div class="chart-yaxis-label">${fmt(v)}</div>`).join('')}
+                    </div>
+                    <div class="chart-main">
+                        <div class="chart-area">`;
+
+            data.forEach(d => {
+                const barHeight = (d.claims / maxClaims) * chartHeight;
+                html += `
+                    <div class="chart-bar-container" data-year="${d.year}" data-claims="${d.claims}">
+                        <div class="chart-bars">
+                            <div class="chart-bar claims" style="height: ${barHeight}px; width: 24px;"></div>
+                        </div>
+                    </div>`;
+            });
+
+            html += `</div><div class="chart-labels">`;
+            data.forEach(d => {
+                html += `<div class="chart-bar-container"><span class="chart-label">${d.year}</span></div>`;
+            });
+
+            html += `</div>
+                    </div>
+                </div>
+                <div class="chart-legend">
+                    <div class="legend-item"><div class="legend-dot claims"></div>Claims Count</div>
+                </div>
+            </div>
+            <div class="chart-tooltip" id="claimDistTooltip" style="display: none;"></div>`;
+
+            $('claimDistChart').innerHTML = html;
+            setupClaimDistTooltips();
+        }
+
+        function setupClaimDistTooltips() {
+            const container = $('claimDistChart');
+            const tooltip = $('claimDistTooltip');
+            const bars = container.querySelectorAll('.chart-bar-container[data-year]');
+            
+            bars.forEach(bar => {
+                bar.addEventListener('mouseenter', (e) => {
+                    const year = bar.dataset.year;
+                    const claims = bar.dataset.claims;
+                    
+                    if (!year) return;
+                    
+                    tooltip.innerHTML = `
+                        <div class="tooltip-title">${year} Accident Year</div>
+                        <div class="tooltip-content">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                                <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--success);"></span>
+                                <span style="color: var(--text-muted);">Claims:</span>
+                                <strong style="color: var(--success);">${fmt(parseInt(claims))}</strong>
+                            </div>
+                        </div>
+                    `;
+                    tooltip.style.display = 'block';
+                    positionTooltip(tooltip, e);
+                    
+                    const chartBar = bar.querySelector('.chart-bar');
+                    if (chartBar) chartBar.style.opacity = '0.85';
+                });
+                
+                bar.addEventListener('mouseleave', () => {
+                    tooltip.style.display = 'none';
+                    const chartBar = bar.querySelector('.chart-bar');
+                    if (chartBar) chartBar.style.opacity = '1';
+                });
+                
+                bar.addEventListener('mousemove', (e) => {
+                    positionTooltip(tooltip, e);
+                });
+            });
+        }
+
+        function renderSummaryTable(data) {
+            let totalPaid = 0, totalReserve = 0, totalIncurred = 0, totalClaims = 0;
+
+            const rows = data.map(d => {
+                totalPaid += d.paid;
+                totalReserve += d.reserve;
+                totalIncurred += d.incurred;
+                totalClaims += d.claims;
+                return `<tr>
+                    <td>${d.year}</td>
+                    <td class="num">${fmt(Math.round(d.paid))}</td>
+                    <td class="num">${fmt(Math.round(d.reserve))}</td>
+                    <td class="num">${fmt(Math.round(d.incurred))}</td>
+                    <td class="num">${fmt(d.claims)}</td>
+                </tr>`;
+            }).join('');
+
+            const totalRow = `<tr style="font-weight: 600; background: var(--bg-tertiary);">
+                <td>Total</td>
+                <td class="num">${fmt(Math.round(totalPaid))}</td>
+                <td class="num">${fmt(Math.round(totalReserve))}</td>
+                <td class="num">${fmt(Math.round(totalIncurred))}</td>
+                <td class="num">${fmt(totalClaims)}</td>
+            </tr>`;
+
+            $('summaryTableBody').innerHTML = rows + totalRow;
+        }
+
+        // Quarterly Cashflow Line Chart
+        const lineColors = [
+            '#3b82f6', // blue - base
+            '#22c55e', // green
+            '#f59e0b', // amber
+            '#ef4444', // red
+            '#8b5cf6', // purple
+            '#06b6d4', // cyan
+            '#ec4899', // pink
+            '#84cc16'  // lime
+        ];
+
+        async function loadQuarterlyChart(filterYears = null) {
+            try {
+                // Default olarak tüm yılların Base pattern'i gelsin
+                let url = '/api/cashflow/quarterly';
+                if (filterYears && filterYears.length > 0) {
+                    url += '?years=' + filterYears.join(',');
+                }
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.success) {
+                    renderQuarterlyLineChart(data);
+                } else {
+                    $('quarterlyLineChart').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                            <div class="empty-title">Unable to load data</div>
+                            <div class="empty-desc">${data.error || 'Process data first'}</div>
+                        </div>`;
+                }
+            } catch (e) {
+                console.error('Failed to load quarterly chart', e);
+            }
+        }
+
+        // Store chart data for tooltips
+        let quarterlyChartData = null;
+
+        function renderQuarterlyLineChart(data) {
+            const container = $('quarterlyLineChart');
+            const quarters = data.quarters || [];
+            const baseData = data.base || [];
+            const scenariosData = data.scenarios || {};
+
+            // Kümülatif hesaplama fonksiyonu
+            function toCumulative(arr) {
+                let sum = 0;
+                return arr.map(v => { sum += v; return sum; });
+            }
+
+            // %100'e ulaşılan ilk index'i bul (99.9% veya üzeri)
+            function findCompletionIndex(cumData) {
+                for (let i = 0; i < cumData.length; i++) {
+                    if (cumData[i] >= 0.9995) return i;
+                }
+                // Eğer 99.95%'e ulaşılamadıysa, son değere en yakın noktayı bul
+                const lastVal = cumData[cumData.length - 1];
+                if (lastVal >= 0.99) {
+                    // Son değer 99%'in üzerindeyse, ona en yakın olan ilk noktayı bul
+                    for (let i = 0; i < cumData.length; i++) {
+                        if (cumData[i] >= lastVal * 0.9999) return i;
+                    }
+                }
+                return -1;
+            }
+
+            // Serileri oluştur - Base ve senaryolar (kümülatif olarak)
+            const allSeries = [];
+
+            // Base serisi (mavi) - kümülatif
+            if (baseData.length > 0) {
+                const cumData = toCumulative(baseData);
+                allSeries.push({ name: 'Base', data: cumData, originalData: baseData, color: '#3b82f6', isBase: true, completionIdx: findCompletionIndex(cumData) });
+            }
+
+            // Senaryo serileri (farklı renkler) - kümülatif
+            const scenarioColors = ['#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
+            let colorIdx = 0;
+            for (const [name, values] of Object.entries(scenariosData)) {
+                const cumData = toCumulative(values);
+                allSeries.push({ name, data: cumData, originalData: values, color: scenarioColors[colorIdx % scenarioColors.length], isBase: false, completionIdx: findCompletionIndex(cumData) });
+                colorIdx++;
+            }
+
+            // Veri yoksa
+            if (allSeries.length === 0 || quarters.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M3 3v18h18"/></svg></div>
+                        <div class="empty-title">No data available</div>
+                        <div class="empty-desc">Process data to see cashflow patterns</div>
+                    </div>`;
+                return;
+            }
+
+            // Store data for tooltips
+            quarterlyChartData = { quarters, allSeries };
+
+            // SVG boyutları
+            const containerWidth = container.clientWidth - 20;
+            const minWidthPerQuarter = 18;
+            const svgWidth = Math.max(containerWidth, quarters.length * minWidthPerQuarter);
+            const height = 280;
+            const padding = { top: 20, right: 25, bottom: 35, left: 50 };
+            const chartWidth = svgWidth - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+
+            // Veri aralığı - kümülatif için max 1 (100%)
+            const maxVal = 1.0;
+
+            // Ölçekler
+            const xStep = chartWidth / (quarters.length - 1 || 1);
+            const yScale = chartHeight / maxVal;
+
+            // SVG
+            let svg = `<svg class="line-chart-svg" width="${svgWidth}" height="${height}" style="display: block;">`;
+
+            // Grid yatay
+            svg += '<g class="line-chart-grid">';
+            for (let i = 0; i <= 4; i++) {
+                const y = padding.top + (chartHeight / 4) * i;
+                svg += `<line x1="${padding.left}" y1="${y}" x2="${svgWidth - padding.right}" y2="${y}"/>`;
+            }
+            // Dikey grid çizgileri (her 5 çeyrekte bir)
+            quarters.forEach((q, i) => {
+                if (i % 5 === 0) {
+                    const x = padding.left + i * xStep;
+                    svg += `<line x1="${x}" y1="${padding.top}" x2="${x}" y2="${padding.top + chartHeight}" style="stroke: var(--border-subtle); stroke-dasharray: 2 4;"/>`;
+                }
+            });
+            svg += '</g>';
+
+            // Y ekseni - 0% ile 100% arası
+            svg += '<g class="line-chart-axis">';
+            for (let i = 0; i <= 4; i++) {
+                const y = padding.top + (chartHeight / 4) * i;
+                const val = 100 - (i * 25);
+                svg += `<text x="${padding.left - 8}" y="${y + 3}" text-anchor="end" style="font-size: 10px; fill: var(--text-muted);">${val}%</text>`;
+            }
+
+            // X ekseni - her 5 çeyrekte bir (daha sık)
+            quarters.forEach((q, i) => {
+                if (i % 5 === 0 || i === quarters.length - 1) {
+                    const x = padding.left + i * xStep;
+                    svg += `<text x="${x}" y="${height - 10}" text-anchor="middle" style="font-size: 9px; fill: var(--text-muted);">${q}</text>`;
+                }
+            });
+            svg += '</g>';
+            
+            // %100 çizgisi vurgusu
+            svg += `<line x1="${padding.left}" y1="${padding.top}" x2="${svgWidth - padding.right}" y2="${padding.top}" style="stroke: var(--success); stroke-width: 1.5; stroke-dasharray: 6 3; opacity: 0.6;"/>`;
+
+            // Çizgiler
+            allSeries.forEach((series) => {
+                let pathD = '';
+                series.data.forEach((val, i) => {
+                    const x = padding.left + i * xStep;
+                    const y = padding.top + chartHeight - (Math.min(val, 1) * yScale);
+                    pathD += (i === 0 ? 'M' : 'L') + `${x},${y}`;
+                });
+                const dashArray = series.isBase ? '' : '5,3';
+                svg += `<path class="line-chart-line" d="${pathD}" stroke="${series.color}" stroke-dasharray="${dashArray}" stroke-width="2" data-series="${series.name}"/>`;
+            });
+
+            // Görünür noktalar (her 5 çeyrekte + completion)
+            allSeries.forEach((series) => {
+                series.data.forEach((val, i) => {
+                    const isComp = (i === series.completionIdx);
+                    if ((i % 5 === 0) || isComp || (i === series.data.length - 1)) {
+                        const x = padding.left + i * xStep;
+                        const y = padding.top + chartHeight - (Math.min(val, 1) * yScale);
+                        svg += `<circle cx="${x}" cy="${y}" r="${isComp ? 7 : 4}" fill="${series.color}" stroke="${isComp ? 'var(--success)' : 'var(--bg-secondary)'}" stroke-width="${isComp ? 3 : 2}"/>`;
+                    }
+                });
+            });
+            // Hover noktaları
+            allSeries.forEach((series) => {
+                series.data.forEach((val, i) => {
+                    const x = padding.left + i * xStep;
+                    const y = padding.top + chartHeight - (Math.min(val, 1) * yScale);
+                    const origVal = series.originalData ? series.originalData[i] : val;
+                    svg += `<circle class="chart-point" cx="${x}" cy="${y}" r="10" fill="transparent" data-series="${series.name}" data-quarter="${quarters[i]}" data-value="${(val * 100).toFixed(2)}" data-original="${(origVal * 100).toFixed(2)}" data-idx="${i}" style="cursor:pointer;"/>`;
+                });
+            });
+
+            svg += '</svg>';
+
+            // Legend - completion bilgisiyle
+            let legend = '<div class="line-chart-legend" style="margin-top: 8px;">';
+            allSeries.forEach(series => {
+                const dashStyle = series.isBase ? '' : 'border-style: dashed;';
+                const compInfo = series.completionIdx >= 0 ? ` (100% @ Q${series.completionIdx + 1})` : '';
+                legend += `<div class="line-chart-legend-item" style="padding: 4px 8px;">
+                    <div class="line-chart-legend-dot" style="background: ${series.color}; ${dashStyle}"></div>
+                    <span>${series.name}${compInfo}</span>
+                </div>`;
+            });
+            legend += '</div>';
+
+            // Tooltip container
+            container.innerHTML = `
+                <div class="chart-scroll-wrapper" style="overflow-x: auto; overflow-y: hidden; position: relative;">
+                    ${svg}
+                    <div class="chart-tooltip" style="display: none;"></div>
+                </div>
+                ${legend}
+            `;
+
+            // Tooltip event listeners
+            setupLineChartTooltips(container, allSeries, quarters);
+        }
+
+        function setupLineChartTooltips(container, allSeries, quarters) {
+            const tooltip = container.querySelector('.chart-tooltip');
+            const points = container.querySelectorAll('.chart-point');
+            const lines = container.querySelectorAll('.line-chart-line');
+
+            points.forEach(point => {
+                point.addEventListener('mouseenter', (e) => {
+                    const idx = parseInt(point.dataset.idx);
+                    const quarter = point.dataset.quarter;
+                    
+                    // Tüm serileri karşılaştırmalı göster
+                    let comparisonHtml = '';
+                    allSeries.forEach(s => {
+                        const cumVal = (s.data[idx] * 100).toFixed(2);
+                        const origVal = (s.originalData[idx] * 100).toFixed(2);
+                        const isComp = (idx === s.completionIdx);
+                        comparisonHtml += `
+                            <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0; ${isComp ? 'background: rgba(34, 197, 94, 0.1); margin: 0 -8px; padding: 4px 8px; border-radius: 4px;' : ''}">
+                                <span style="width: 10px; height: 10px; border-radius: 3px; background: ${s.color}; flex-shrink: 0;"></span>
+                                <span style="flex: 1; font-weight: 500;">${s.name}</span>
+                                <span style="color: ${s.color}; font-weight: 600; min-width: 55px; text-align: right;">${cumVal}%</span>
+                                ${isComp ? '<span style="color: var(--success); font-size: 10px;">✓</span>' : ''}
+                            </div>`;
+                    });
+                    
+                    tooltip.innerHTML = `
+                        <div class="tooltip-title" style="font-size: 13px; padding-bottom: 6px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 6px;">
+                            Period: <strong>${quarter}</strong>
+                        </div>
+                        <div class="tooltip-content">
+                            ${comparisonHtml}
+                        </div>
+                    `;
+                    tooltip.style.display = 'block';
+                    tooltip.style.minWidth = '180px';
+                    positionTooltip(tooltip, e);
+                });
+                
+                point.addEventListener('mouseleave', () => {
+                    tooltip.style.display = 'none';
+                    lines.forEach(line => {
+                        line.style.strokeWidth = '2';
+                        line.style.opacity = '1';
+                    });
+                });
+                
+                point.addEventListener('mousemove', (e) => {
+                    positionTooltip(tooltip, e);
+                });
+            });
+        }
+
+        function highlightSeries(el) {
+            const seriesName = el.dataset.series;
+            document.querySelectorAll('.line-chart-line').forEach(line => {
+                if (line.dataset.series === seriesName) {
+                    line.style.strokeWidth = '3';
+                    line.style.opacity = '1';
+                } else {
+                    line.style.opacity = '0.2';
+                }
+            });
+        }
+
+        function unhighlightSeries(el) {
+            document.querySelectorAll('.line-chart-line').forEach(line => {
+                line.style.strokeWidth = '2';
+                line.style.opacity = '1';
+            });
+        }
+
+        // Initialize Year Selects
+        function initializeYearSelects() {
+            const yearStrings = availableYears.map(y => String(y));
+
+            // Payment Years Select
+            createMultiSelect('paymentYearsSelect', yearStrings, 'Select years...');
+
+            // Reserve Years Select
+            createMultiSelect('reserveYearsSelect', yearStrings, 'Select years...');
+
+            // Quarterly Chart Year Filter
+            createMultiSelect('quarterlyYearFilter', yearStrings, 'All years', (selected) => {
+                loadQuarterlyChart(selected);
+            });
+        }
+
+        // Keyboard
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                closeModal('scenarioModal');
+                closeModal('claimPickerModal');
+            }
+        });
+    </script>
+</body>
+</html>

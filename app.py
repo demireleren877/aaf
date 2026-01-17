@@ -14,6 +14,8 @@ from main import (
     calculate_cashflow_pattern,
     create_comparison_excel
 )
+from oracle_connector import oracle_db
+from analysis_engine import script_manager, analysis_engine
 
 app = Flask(__name__)
 app.secret_key = 'cashflow_analysis_secret_key_2024'
@@ -978,12 +980,358 @@ def list_output_files():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# =====================================================
+# Oracle Connection API Endpoints
+# =====================================================
+
+@app.route('/api/oracle/connect', methods=['POST'])
+def oracle_connect():
+    """Oracle veritabanına bağlan"""
+    try:
+        data = request.json
+        host = data.get('host')
+        port = int(data.get('port', 1521))
+        service = data.get('service')
+        username = data.get('username')
+        password = data.get('password')
+
+        if not all([host, service, username, password]):
+            return jsonify({
+                'success': False,
+                'error': 'Tüm bağlantı bilgileri gerekli'
+            }), 400
+
+        oracle_db.connect(host, port, service, username, password)
+
+        # Set connector for analysis engine
+        analysis_engine.set_connector(oracle_db)
+
+        # Save connection info to session (not password)
+        session['oracle_connected'] = True
+        session['oracle_config'] = {
+            'host': host,
+            'port': port,
+            'service': service,
+            'username': username
+        }
+
+        return jsonify({
+            'success': True,
+            'message': 'Oracle bağlantısı başarılı',
+            'config': session['oracle_config']
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/oracle/test')
+def oracle_test():
+    """Oracle bağlantısını test et"""
+    try:
+        result = oracle_db.test_connection()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/oracle/disconnect', methods=['POST'])
+def oracle_disconnect():
+    """Oracle bağlantısını kapat"""
+    try:
+        oracle_db.close()
+        session.pop('oracle_connected', None)
+        session.pop('oracle_config', None)
+        return jsonify({'success': True, 'message': 'Bağlantı kapatıldı'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/oracle/status')
+def oracle_status():
+    """Oracle bağlantı durumu"""
+    return jsonify({
+        'connected': oracle_db.is_connected(),
+        'config': session.get('oracle_config', {})
+    })
+
+
+@app.route('/api/oracle/tables')
+def oracle_tables():
+    """Oracle tablolarını listele"""
+    try:
+        if not oracle_db.is_connected():
+            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
+
+        schema = request.args.get('schema', None)
+        tables = oracle_db.get_tables(schema)
+        return jsonify({'success': True, 'tables': tables})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/oracle/fetch-data', methods=['POST'])
+def oracle_fetch_data():
+    """Oracle'dan veri çek"""
+    try:
+        if not oracle_db.is_connected():
+            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
+
+        data = request.json
+        table_name = data.get('table')
+        query = data.get('query')
+
+        if query:
+            df = oracle_db.execute_query(query)
+        elif table_name:
+            df = oracle_db.execute_query(f"SELECT * FROM {table_name}")
+        else:
+            return jsonify({'success': False, 'error': 'Tablo adı veya sorgu gerekli'}), 400
+
+        # Store in memory
+        current_data['df'] = df
+        current_data['file_path'] = 'oracle_query'
+
+        return jsonify({
+            'success': True,
+            'message': f'{len(df)} satır veri çekildi',
+            'rows': len(df),
+            'columns': df.columns.tolist()
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/oracle/write-cashflows', methods=['POST'])
+def oracle_write_cashflows():
+    """Cashflow pattern'ları Oracle'a yaz"""
+    try:
+        if not oracle_db.is_connected():
+            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
+
+        data = request.json
+        run_id = data.get('run_id') or analysis_engine.generate_run_id()
+        scenarios_to_write = data.get('scenarios', ['Base'])
+
+        # Read base cashflow
+        base_file = os.path.join(OUTPUT_DIR, 'base_cashflow.xlsx')
+        if not os.path.exists(base_file):
+            return jsonify({'success': False, 'error': 'Base cashflow dosyası bulunamadı'}), 404
+
+        written = {}
+
+        # Write base if requested
+        if 'Base' in scenarios_to_write:
+            base_pattern = pd.read_excel(base_file, sheet_name='cashflow pattern')
+            # Get average across all years
+            avg_pattern = base_pattern.groupby('Period')['Normalize Ağırlık'].mean()
+            quarters = [f"Q{int(p)}" for p in sorted(avg_pattern.index)]
+            weights = [float(avg_pattern[p]) for p in sorted(avg_pattern.index)]
+
+            rows = oracle_db.write_cashflow_patterns(run_id, 'Base', quarters, weights)
+            written['Base'] = rows
+
+        # Write scenarios
+        session_scenarios = session.get('scenarios', [])
+        for scenario in session_scenarios:
+            if scenario['name'] in scenarios_to_write:
+                scenario_file = os.path.join(OUTPUT_DIR, f"scenario_{scenario['name']}.xlsx")
+                if os.path.exists(scenario_file):
+                    scenario_pattern = pd.read_excel(scenario_file, sheet_name='cashflow pattern')
+                    avg_pattern = scenario_pattern.groupby('Period')['Normalize Ağırlık'].mean()
+                    quarters = [f"Q{int(p)}" for p in sorted(avg_pattern.index)]
+                    weights = [float(avg_pattern[p]) for p in sorted(avg_pattern.index)]
+
+                    rows = oracle_db.write_cashflow_patterns(run_id, scenario['name'], quarters, weights)
+                    written[scenario['name']] = rows
+
+        return jsonify({
+            'success': True,
+            'run_id': run_id,
+            'written': written,
+            'message': f'{sum(written.values())} satır yazıldı'
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# =====================================================
+# SQL Scripts API Endpoints
+# =====================================================
+
+@app.route('/api/scripts', methods=['GET'])
+def get_scripts():
+    """Tüm SQL scriptlerini listele"""
+    scripts = script_manager.get_all()
+    return jsonify({'success': True, 'scripts': scripts})
+
+
+@app.route('/api/scripts', methods=['POST'])
+def add_script():
+    """Yeni SQL script ekle"""
+    try:
+        data = request.json
+        script = script_manager.add(data)
+        return jsonify({'success': True, 'script': script})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/scripts/<script_id>', methods=['GET'])
+def get_script(script_id):
+    """Script detayını getir"""
+    script = script_manager.get_by_id(script_id)
+    if script:
+        return jsonify({'success': True, 'script': script})
+    return jsonify({'success': False, 'error': 'Script bulunamadı'}), 404
+
+
+@app.route('/api/scripts/<script_id>', methods=['PUT'])
+def update_script(script_id):
+    """Script güncelle"""
+    try:
+        data = request.json
+        script = script_manager.update(script_id, data)
+        if script:
+            return jsonify({'success': True, 'script': script})
+        return jsonify({'success': False, 'error': 'Script bulunamadı'}), 404
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/scripts/<script_id>', methods=['DELETE'])
+def delete_script(script_id):
+    """Script sil"""
+    try:
+        if script_manager.delete(script_id):
+            return jsonify({'success': True, 'message': 'Script silindi'})
+        return jsonify({'success': False, 'error': 'Script bulunamadı'}), 404
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/scripts/<script_id>/test', methods=['POST'])
+def test_script(script_id):
+    """Script'i test et"""
+    try:
+        if not oracle_db.is_connected():
+            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
+
+        data = request.json
+        params = data.get('params', {})
+
+        result = analysis_engine.execute_script(script_id, params)
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# =====================================================
+# Analysis API Endpoints
+# =====================================================
+
+@app.route('/api/analysis/run', methods=['POST'])
+def run_analysis():
+    """Batch analiz çalıştır"""
+    try:
+        if not oracle_db.is_connected():
+            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
+
+        data = request.json
+        scenarios = data.get('scenarios', ['Base'])
+        script_ids = data.get('scripts', [])
+        params = data.get('params', {})
+        write_cashflows = data.get('write_cashflows', True)
+
+        if not script_ids:
+            return jsonify({'success': False, 'error': 'En az bir script seçin'}), 400
+
+        # Prepare cashflows if needed
+        cashflows = None
+        if write_cashflows:
+            cashflows = {}
+
+            # Base cashflow
+            base_file = os.path.join(OUTPUT_DIR, 'base_cashflow.xlsx')
+            if os.path.exists(base_file) and 'Base' in scenarios:
+                base_pattern = pd.read_excel(base_file, sheet_name='cashflow pattern')
+                avg_pattern = base_pattern.groupby('Period')['Normalize Ağırlık'].mean()
+                cashflows['Base'] = {
+                    'quarters': [f"Q{int(p)}" for p in sorted(avg_pattern.index)],
+                    'weights': [float(avg_pattern[p]) for p in sorted(avg_pattern.index)]
+                }
+
+            # Scenario cashflows
+            session_scenarios = session.get('scenarios', [])
+            for scenario in session_scenarios:
+                if scenario['name'] in scenarios:
+                    scenario_file = os.path.join(OUTPUT_DIR, f"scenario_{scenario['name']}.xlsx")
+                    if os.path.exists(scenario_file):
+                        scenario_pattern = pd.read_excel(scenario_file, sheet_name='cashflow pattern')
+                        avg_pattern = scenario_pattern.groupby('Period')['Normalize Ağırlık'].mean()
+                        cashflows[scenario['name']] = {
+                            'quarters': [f"Q{int(p)}" for p in sorted(avg_pattern.index)],
+                            'weights': [float(avg_pattern[p]) for p in sorted(avg_pattern.index)]
+                        }
+
+        # Run analysis
+        result = analysis_engine.run_analysis(
+            scenarios=scenarios,
+            script_ids=script_ids,
+            user_params=params,
+            cashflows=cashflows
+        )
+
+        # Format for display
+        result['table'] = analysis_engine.format_results_table(
+            result['results'],
+            result['comparison']
+        )
+
+        return jsonify({
+            'success': True,
+            **result
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/analysis/history')
+def analysis_history():
+    """Analiz geçmişi"""
+    try:
+        if not oracle_db.is_connected():
+            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
+
+        limit = request.args.get('limit', 100, type=int)
+        df = oracle_db.get_analysis_history(limit)
+
+        return jsonify({
+            'success': True,
+            'history': df.to_dict('records')
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("=" * 80)
     print("CASHFLOW PATTERN SENARYO ANALİZİ - WEB ARAYÜZÜ")
     print("=" * 80)
     print("\nWeb arayüzü başlatılıyor...")
-    print("Tarayıcınızda şu adresi açın: http://localhost:5000")
+    print("Tarayıcınızda şu adresi açın: http://localhost:5001")
     print("\nÇıkmak için Ctrl+C tuşlarına basın")
     print("=" * 80)
 

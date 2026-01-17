@@ -1,0 +1,105 @@
+{
+  "scripts": [
+    {
+      "id": "ultimate_reserve",
+      "name": "Ultimate Reserve",
+      "description": "Calculates total ultimate reserve using cashflow pattern weights",
+      "sql": "SELECT SUM(paid_amount * weight) AS ultimate_reserve\nFROM claims_data c\nJOIN CASHFLOW_PATTERNS cp ON cp.RUN_ID = :run_id AND cp.SCENARIO_NAME = :scenario_name\nWHERE c.valuation_date = :val_date",
+      "parameters": [
+        {
+          "name": "run_id",
+          "type": "text",
+          "description": "Cashflow run identifier",
+          "required": true
+        },
+        {
+          "name": "scenario_name",
+          "type": "text",
+          "description": "Scenario name (Base or scenario)",
+          "required": true
+        },
+        {
+          "name": "val_date",
+          "type": "date",
+          "description": "Valuation date",
+          "default": "2024-09-30",
+          "required": true
+        }
+      ],
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "ibnr_calculation",
+      "name": "IBNR Calculation",
+      "description": "Calculates Incurred But Not Reported reserves",
+      "sql": "SELECT SUM(reserve_amount * weight * :tail_factor) AS ibnr\nFROM reserves_data r\nJOIN CASHFLOW_PATTERNS cp ON cp.RUN_ID = :run_id AND cp.SCENARIO_NAME = :scenario_name\nWHERE r.valuation_date = :val_date",
+      "parameters": [
+        {
+          "name": "run_id",
+          "type": "text",
+          "description": "Cashflow run identifier",
+          "required": true
+        },
+        {
+          "name": "scenario_name",
+          "type": "text",
+          "description": "Scenario name",
+          "required": true
+        },
+        {
+          "name": "val_date",
+          "type": "date",
+          "description": "Valuation date",
+          "default": "2024-09-30",
+          "required": true
+        },
+        {
+          "name": "tail_factor",
+          "type": "number",
+          "description": "Tail development factor",
+          "default": 1.05,
+          "required": true
+        }
+      ],
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "discounted_cashflow",
+      "name": "Discounted Cashflow",
+      "description": "Calculates present value of future cashflows",
+      "sql": "SELECT SUM(amount * weight / POWER(1 + :discount_rate, quarter/4)) AS pv_cashflow\nFROM cashflow_data c\nJOIN CASHFLOW_PATTERNS cp ON cp.RUN_ID = :run_id AND cp.SCENARIO_NAME = :scenario_name AND cp.QUARTER = c.quarter\nWHERE c.valuation_date = :val_date",
+      "parameters": [
+        {
+          "name": "run_id",
+          "type": "text",
+          "description": "Cashflow run identifier",
+          "required": true
+        },
+        {
+          "name": "scenario_name",
+          "type": "text",
+          "description": "Scenario name",
+          "required": true
+        },
+        {
+          "name": "val_date",
+          "type": "date",
+          "description": "Valuation date",
+          "default": "2024-09-30",
+          "required": true
+        },
+        {
+          "name": "discount_rate",
+          "type": "number",
+          "description": "Annual discount rate (e.g., 0.035 for 3.5%)",
+          "default": 0.035,
+          "required": true
+        }
+      ],
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    }
+  ]
+}

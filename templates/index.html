@@ -361,6 +361,24 @@
                         Scenarios
                         <span class="badge" id="scenarioCount">0</span>
                     </button>
+                    <button class="nav-btn" data-page="scripts" onclick="showPage('scripts')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>
+                        SQL Scripts
+                        <span class="badge" id="scriptCount">0</span>
+                    </button>
+                    <button class="nav-btn" data-page="analysis" onclick="showPage('analysis')" disabled id="analysisPageBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                        Analysis
+                    </button>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-label">Oracle</div>
+                    <button class="nav-btn" onclick="openModal('settingsModal')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                        Connection
+                        <span class="badge" id="oracleStatus" style="background: var(--danger);">OFF</span>
+                    </button>
                 </div>
 
                 <div class="nav-section">
@@ -557,6 +575,93 @@
 
                 </div>
 
+                <!-- Scripts Page -->
+                <div class="page" id="scriptsPage">
+                    <div class="two-col">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">SQL Scripts</div>
+                                <button class="btn btn-primary btn-sm" onclick="openScriptModal()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 5v14M5 12h14"/></svg>
+                                    New Script
+                                </button>
+                            </div>
+                            <div id="scriptsList" class="card-body" style="padding: 0; max-height: 500px; overflow-y: auto;"></div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">Script Preview</div>
+                            </div>
+                            <div class="card-body" id="scriptPreviewContent">
+                                <div class="empty-state">
+                                    <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></div>
+                                    <div class="empty-title">Select a script</div>
+                                    <div class="empty-desc">View SQL query and parameters</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analysis Page -->
+                <div class="page" id="analysisPage">
+                    <div class="card" style="margin-bottom: 20px;">
+                        <div class="card-header">
+                            <div class="card-title">Run Analysis</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row" style="grid-template-columns: 1fr 1fr 1fr;">
+                                <div class="form-group">
+                                    <label class="form-label">Select Scenarios</label>
+                                    <div class="multi-select-container" id="analysisScenarioMultiSelect"></div>
+                                    <div class="form-hint">Base is always included</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Select Scripts</label>
+                                    <div class="multi-select-container" id="analysisScriptMultiSelect"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Valuation Date</label>
+                                    <input type="date" class="form-input" id="analysisValDate" value="2024-09-30">
+                                </div>
+                            </div>
+                            <div id="analysisParamsContainer" style="margin-top: 16px;"></div>
+                            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                                <button class="btn btn-primary" onclick="runAnalysis()" id="runAnalysisBtn" disabled>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                    Run Analysis
+                                </button>
+                                <button class="btn btn-secondary" onclick="writeToOracle()" id="writeOracleBtn" disabled>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                                    Write Cashflows to Oracle
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" id="analysisResultsCard" style="display: none;">
+                        <div class="card-header">
+                            <div class="card-title">Analysis Results</div>
+                            <div style="display: flex; gap: 8px;">
+                                <span class="badge" id="analysisRunId" style="background: var(--bg-hover); font-size: 11px;"></span>
+                                <button class="btn btn-secondary btn-sm" onclick="exportAnalysisResults()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                                    Export Excel
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body" style="padding: 0;">
+                            <div class="table-container" style="max-height: 400px; overflow: auto;">
+                                <table class="data-table" id="analysisResultsTable">
+                                    <thead id="analysisResultsHead"></thead>
+                                    <tbody id="analysisResultsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </main>
     </div>
@@ -713,6 +818,107 @@
                 <button class="btn btn-primary" onclick="confirmClaimSelection()">
                     Confirm Selection (<span id="confirmClaimCount">0</span>)
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal (Oracle Connection) -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Oracle Connection</div>
+                <button class="modal-close" onclick="closeModal('settingsModal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Host</label>
+                        <input type="text" class="form-input" id="oracleHost" placeholder="localhost">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Port</label>
+                        <input type="number" class="form-input" id="oraclePort" value="1521">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Service Name</label>
+                    <input type="text" class="form-input" id="oracleService" placeholder="ORCL">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-input" id="oracleUsername" placeholder="username">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" class="form-input" id="oraclePassword" placeholder="password">
+                    </div>
+                </div>
+                <div id="oracleConnectionStatus" style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius); display: none;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <svg id="oracleStatusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/></svg>
+                        <div>
+                            <div id="oracleStatusText" style="font-size: 13px; font-weight: 500;">Not connected</div>
+                            <div id="oracleStatusDetail" style="font-size: 11px; color: var(--text-muted);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="disconnectOracle()" id="oracleDisconnectBtn" style="display: none;">Disconnect</button>
+                <button class="btn btn-secondary" onclick="testOracleConnection()">Test Connection</button>
+                <button class="btn btn-primary" onclick="connectOracle()">Connect</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Modal -->
+    <div class="modal-overlay" id="scriptModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <div class="modal-title" id="scriptModalTitle">New Script</div>
+                <button class="modal-close" onclick="closeModal('scriptModal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Script ID</label>
+                        <input type="text" class="form-input" id="scriptId" placeholder="unique_script_id">
+                        <div class="form-hint">Unique identifier (no spaces)</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Script Name</label>
+                        <input type="text" class="form-input" id="scriptName" placeholder="My Script">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input type="text" class="form-input" id="scriptDescription" placeholder="What does this script calculate?">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">SQL Query</label>
+                    <textarea class="form-input" id="scriptSql" rows="8" style="font-family: 'SF Mono', Monaco, monospace; font-size: 12px;" placeholder="SELECT SUM(amount) AS result
+FROM my_table
+WHERE run_id = :run_id
+  AND scenario = :scenario_name"></textarea>
+                    <div class="form-hint">Use :param_name for parameters. System params: :run_id, :scenario_name</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Parameters</label>
+                    <div id="scriptParamsContainer"></div>
+                    <button class="btn btn-sm btn-ghost" onclick="addScriptParam()" style="margin-top: 8px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 5v14M5 12h14"/></svg>
+                        Add Parameter
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('scriptModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveScript()">Save Script</button>
             </div>
         </div>
     </div>
@@ -982,7 +1188,12 @@
                     $('dashboardContent').style.display = 'block';
                     $('sidebarStats').style.display = 'block';
                     $('scenariosPageBtn').disabled = false;
+                    $('analysisPageBtn').disabled = false;
                     $('downloadBaseBtn').disabled = false;
+                    if (oracleConnected) {
+                        $('writeOracleBtn').disabled = false;
+                        $('runAnalysisBtn').disabled = false;
+                    }
 
                     $('statRows').textContent = fmt(data.stats.total_rows);
                     $('statClaims').textContent = fmt(data.stats.unique_claims);
@@ -1917,7 +2128,586 @@
             if (e.key === 'Escape') {
                 closeModal('scenarioModal');
                 closeModal('claimPickerModal');
+                closeModal('settingsModal');
+                closeModal('scriptModal');
             }
+        });
+
+        // ===== Oracle Connection Functions =====
+        let oracleConnected = false;
+
+        async function testOracleConnection() {
+            const host = $('oracleHost').value;
+            const port = parseInt($('oraclePort').value) || 1521;
+            const service = $('oracleService').value;
+            const username = $('oracleUsername').value;
+            const password = $('oraclePassword').value;
+
+            if (!host || !service || !username || !password) {
+                toast('Fill in all connection fields', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const res = await fetch('/api/oracle/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, port, service, username, password })
+                });
+                const data = await res.json();
+
+                const statusDiv = $('oracleConnectionStatus');
+                statusDiv.style.display = 'block';
+
+                if (data.success) {
+                    updateOracleStatus(true, data);
+                    toast('Connection successful');
+                } else {
+                    updateOracleStatus(false, { error: data.error });
+                    toast(data.error || 'Connection failed', 'error');
+                }
+            } catch (e) {
+                toast('Connection test failed', 'error');
+            }
+            showLoading(false);
+        }
+
+        async function connectOracle() {
+            await testOracleConnection();
+            if (oracleConnected) {
+                closeModal('settingsModal');
+            }
+        }
+
+        async function disconnectOracle() {
+            showLoading(true);
+            try {
+                await fetch('/api/oracle/disconnect', { method: 'POST' });
+                updateOracleStatus(false);
+                toast('Disconnected from Oracle');
+            } catch (e) {
+                toast('Disconnect failed', 'error');
+            }
+            showLoading(false);
+        }
+
+        function updateOracleStatus(connected, data = {}) {
+            oracleConnected = connected;
+            const statusDiv = $('oracleConnectionStatus');
+            const statusIcon = $('oracleStatusIcon');
+            const statusText = $('oracleStatusText');
+            const statusDetail = $('oracleStatusDetail');
+            const statusBadge = $('oracleStatus');
+            const disconnectBtn = $('oracleDisconnectBtn');
+            const writeOracleBtn = $('writeOracleBtn');
+            const runAnalysisBtn = $('runAnalysisBtn');
+
+            statusDiv.style.display = 'block';
+
+            if (connected) {
+                statusIcon.innerHTML = '<path d="M22 11.08V12a10 10 0 11-5.93-9.14M22 4L12 14.01l-3-3"/>';
+                statusIcon.style.color = 'var(--success)';
+                statusText.textContent = 'Connected';
+                statusText.style.color = 'var(--success)';
+                statusDetail.textContent = `${data.user || ''} @ ${data.database || ''}`;
+                statusBadge.style.background = 'var(--success)';
+                statusBadge.textContent = 'ON';
+                disconnectBtn.style.display = 'block';
+                if (writeOracleBtn) writeOracleBtn.disabled = !dataLoaded;
+                if (runAnalysisBtn) runAnalysisBtn.disabled = !dataLoaded;
+            } else {
+                statusIcon.innerHTML = '<circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/>';
+                statusIcon.style.color = 'var(--danger)';
+                statusText.textContent = data.error ? 'Connection Failed' : 'Not Connected';
+                statusText.style.color = data.error ? 'var(--danger)' : 'var(--text-secondary)';
+                statusDetail.textContent = data.error || '';
+                statusBadge.style.background = 'var(--danger)';
+                statusBadge.textContent = 'OFF';
+                disconnectBtn.style.display = 'none';
+                if (writeOracleBtn) writeOracleBtn.disabled = true;
+                if (runAnalysisBtn) runAnalysisBtn.disabled = true;
+            }
+        }
+
+        async function checkOracleStatus() {
+            try {
+                const res = await fetch('/api/oracle/status');
+                const data = await res.json();
+                if (data.connected) {
+                    updateOracleStatus(true, data);
+                }
+            } catch (e) { }
+        }
+
+        // ===== SQL Scripts Functions =====
+        let scripts = [];
+        let editingScriptId = null;
+        let scriptParams = [];
+
+        async function loadScripts() {
+            try {
+                const res = await fetch('/api/scripts');
+                const data = await res.json();
+                if (data.success) {
+                    scripts = data.scripts || [];
+                    renderScriptsList();
+                    $('scriptCount').textContent = scripts.length;
+                    updateAnalysisScriptSelect();
+                }
+            } catch (e) {
+                console.error('Failed to load scripts', e);
+            }
+        }
+
+        function renderScriptsList() {
+            const container = $('scriptsList');
+            if (scripts.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="padding: 40px;">
+                        <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></div>
+                        <div class="empty-title">No scripts yet</div>
+                        <div class="empty-desc">Create SQL scripts to run analysis</div>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="scenario-list" style="padding: 16px;">
+                    ${scripts.map(s => `
+                        <div class="scenario-item" onclick="previewScript('${s.id}')" style="cursor: pointer;">
+                            <div class="scenario-icon" style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+                            </div>
+                            <div class="scenario-info">
+                                <div class="scenario-name">${s.name}</div>
+                                <div class="scenario-desc">${s.description || 'No description'}</div>
+                            </div>
+                            <div class="scenario-actions">
+                                <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); editScript('${s.id}')" title="Edit">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteScript('${s.id}')" title="Delete">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>`;
+        }
+
+        function previewScript(scriptId) {
+            const script = scripts.find(s => s.id === scriptId);
+            if (!script) return;
+
+            const paramsHtml = (script.parameters || []).filter(p => !['run_id', 'scenario_name'].includes(p.name)).map(p => `
+                <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-subtle);">
+                    <span style="color: var(--text-muted);">${p.name}</span>
+                    <span style="font-weight: 500;">${p.type}${p.default !== undefined ? ` (default: ${p.default})` : ''}</span>
+                </div>
+            `).join('');
+
+            $('scriptPreviewContent').innerHTML = `
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">${script.name}</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">${script.description || 'No description'}</div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">SQL QUERY</div>
+                    <pre style="background: var(--bg-primary); padding: 12px; border-radius: var(--radius); font-family: 'SF Mono', Monaco, monospace; font-size: 11px; overflow-x: auto; white-space: pre-wrap; border: 1px solid var(--border-color);">${script.sql}</pre>
+                </div>
+                ${paramsHtml ? `
+                <div>
+                    <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">PARAMETERS</div>
+                    ${paramsHtml}
+                </div>` : ''}
+            `;
+        }
+
+        function openScriptModal(scriptId = null) {
+            editingScriptId = scriptId;
+            scriptParams = [];
+
+            if (scriptId) {
+                const script = scripts.find(s => s.id === scriptId);
+                if (script) {
+                    $('scriptModalTitle').textContent = 'Edit Script';
+                    $('scriptId').value = script.id;
+                    $('scriptId').disabled = true;
+                    $('scriptName').value = script.name;
+                    $('scriptDescription').value = script.description || '';
+                    $('scriptSql').value = script.sql;
+                    scriptParams = (script.parameters || []).filter(p => !['run_id', 'scenario_name'].includes(p.name));
+                }
+            } else {
+                $('scriptModalTitle').textContent = 'New Script';
+                $('scriptId').value = '';
+                $('scriptId').disabled = false;
+                $('scriptName').value = '';
+                $('scriptDescription').value = '';
+                $('scriptSql').value = '';
+                scriptParams = [];
+            }
+
+            renderScriptParams();
+            openModal('scriptModal');
+        }
+
+        function editScript(scriptId) {
+            openScriptModal(scriptId);
+        }
+
+        function renderScriptParams() {
+            const container = $('scriptParamsContainer');
+            if (scriptParams.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">No custom parameters. System params (run_id, scenario_name) are auto-included.</div>';
+                return;
+            }
+
+            container.innerHTML = scriptParams.map((p, i) => `
+                <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start;">
+                    <input type="text" class="form-input" value="${p.name}" placeholder="param_name" onchange="updateScriptParam(${i}, 'name', this.value)" style="flex: 1;">
+                    <select class="form-input form-select" onchange="updateScriptParam(${i}, 'type', this.value)" style="width: 100px;">
+                        <option value="text" ${p.type === 'text' ? 'selected' : ''}>Text</option>
+                        <option value="number" ${p.type === 'number' ? 'selected' : ''}>Number</option>
+                        <option value="date" ${p.type === 'date' ? 'selected' : ''}>Date</option>
+                    </select>
+                    <input type="text" class="form-input" value="${p.default !== undefined ? p.default : ''}" placeholder="Default" onchange="updateScriptParam(${i}, 'default', this.value)" style="width: 100px;">
+                    <button class="btn btn-sm btn-danger" onclick="removeScriptParam(${i})">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function addScriptParam() {
+            scriptParams.push({ name: '', type: 'text', default: '' });
+            renderScriptParams();
+        }
+
+        function updateScriptParam(index, field, value) {
+            if (scriptParams[index]) {
+                scriptParams[index][field] = value;
+            }
+        }
+
+        function removeScriptParam(index) {
+            scriptParams.splice(index, 1);
+            renderScriptParams();
+        }
+
+        async function saveScript() {
+            const id = $('scriptId').value.trim();
+            const name = $('scriptName').value.trim();
+            const description = $('scriptDescription').value.trim();
+            const sql = $('scriptSql').value.trim();
+
+            if (!id || !name || !sql) {
+                toast('Fill in ID, Name, and SQL', 'error');
+                return;
+            }
+
+            // Add system parameters
+            const allParams = [
+                { name: 'run_id', type: 'text', description: 'Cashflow run identifier', required: true },
+                { name: 'scenario_name', type: 'text', description: 'Scenario name', required: true },
+                ...scriptParams.filter(p => p.name.trim())
+            ];
+
+            const scriptData = { id, name, description, sql, parameters: allParams };
+
+            showLoading(true);
+            try {
+                const url = editingScriptId ? `/api/scripts/${editingScriptId}` : '/api/scripts';
+                const method = editingScriptId ? 'PUT' : 'POST';
+
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(scriptData)
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    toast(editingScriptId ? 'Script updated' : 'Script created');
+                    closeModal('scriptModal');
+                    loadScripts();
+                } else {
+                    toast(data.error || 'Failed to save script', 'error');
+                }
+            } catch (e) {
+                toast('Failed to save script', 'error');
+            }
+            showLoading(false);
+        }
+
+        async function deleteScript(scriptId) {
+            if (!confirm('Delete this script?')) return;
+
+            showLoading(true);
+            try {
+                const res = await fetch(`/api/scripts/${scriptId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    toast('Script deleted');
+                    loadScripts();
+                    $('scriptPreviewContent').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></div>
+                            <div class="empty-title">Select a script</div>
+                            <div class="empty-desc">View SQL query and parameters</div>
+                        </div>`;
+                } else {
+                    toast(data.error || 'Failed to delete', 'error');
+                }
+            } catch (e) {
+                toast('Failed to delete script', 'error');
+            }
+            showLoading(false);
+        }
+
+        // ===== Analysis Functions =====
+        let lastAnalysisResults = null;
+
+        function updateAnalysisScriptSelect() {
+            if (scripts.length > 0) {
+                const scriptNames = scripts.map(s => s.name);
+                createMultiSelect('analysisScriptMultiSelect', scriptNames, 'Select scripts...', updateAnalysisParams);
+            }
+        }
+
+        function updateAnalysisScenarioSelect() {
+            const scenarioNames = scenarios.map(s => s.name);
+            createMultiSelect('analysisScenarioMultiSelect', scenarioNames, 'Select scenarios...');
+        }
+
+        function updateAnalysisParams(selectedScriptNames) {
+            const container = $('analysisParamsContainer');
+            if (!selectedScriptNames || selectedScriptNames.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            // Collect unique params from selected scripts
+            const params = new Map();
+            selectedScriptNames.forEach(name => {
+                const script = scripts.find(s => s.name === name);
+                if (script && script.parameters) {
+                    script.parameters.forEach(p => {
+                        if (!['run_id', 'scenario_name', 'val_date'].includes(p.name) && !params.has(p.name)) {
+                            params.set(p.name, p);
+                        }
+                    });
+                }
+            });
+
+            if (params.size === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = `
+                <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">SCRIPT PARAMETERS</div>
+                <div class="form-row" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
+                    ${Array.from(params.values()).map(p => `
+                        <div class="form-group">
+                            <label class="form-label">${p.name}</label>
+                            <input type="${p.type === 'number' ? 'number' : 'text'}"
+                                   class="form-input analysis-param"
+                                   id="param_${p.name}"
+                                   value="${p.default !== undefined ? p.default : ''}"
+                                   placeholder="${p.description || p.name}"
+                                   step="${p.type === 'number' ? 'any' : ''}">
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function runAnalysis() {
+            const selectedScenarios = multiSelectInstances['analysisScenarioMultiSelect']?.getSelected() || [];
+            const selectedScriptNames = multiSelectInstances['analysisScriptMultiSelect']?.getSelected() || [];
+            const valDate = $('analysisValDate').value;
+
+            if (selectedScriptNames.length === 0) {
+                toast('Select at least one script', 'error');
+                return;
+            }
+
+            // Get script IDs from names
+            const scriptIds = selectedScriptNames.map(name => {
+                const script = scripts.find(s => s.name === name);
+                return script ? script.id : null;
+            }).filter(id => id);
+
+            // Collect custom params
+            const userParams = { val_date: valDate };
+            document.querySelectorAll('.analysis-param').forEach(input => {
+                const paramName = input.id.replace('param_', '');
+                userParams[paramName] = input.value;
+            });
+
+            // Scenarios: Base + selected
+            const scenarioList = ['Base', ...selectedScenarios];
+
+            showLoading(true);
+            try {
+                const res = await fetch('/api/analysis/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        scenarios: scenarioList,
+                        script_ids: scriptIds,
+                        parameters: userParams
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    lastAnalysisResults = data;
+                    renderAnalysisResults(data);
+                    toast('Analysis completed');
+                } else {
+                    toast(data.error || 'Analysis failed', 'error');
+                }
+            } catch (e) {
+                toast('Analysis failed', 'error');
+                console.error(e);
+            }
+            showLoading(false);
+        }
+
+        function renderAnalysisResults(data) {
+            const resultsCard = $('analysisResultsCard');
+            resultsCard.style.display = 'block';
+
+            $('analysisRunId').textContent = data.run_id || '';
+
+            const scenarioList = Object.keys(data.results || {});
+            const scriptIds = new Set();
+            Object.values(data.results || {}).forEach(sr => {
+                Object.keys(sr).forEach(id => scriptIds.add(id));
+            });
+
+            // Header
+            let headerHtml = '<tr><th>Script</th>';
+            scenarioList.forEach(s => {
+                headerHtml += `<th class="num">${s}</th>`;
+                if (s !== 'Base') {
+                    headerHtml += `<th class="num" style="color: var(--text-muted); font-size: 10px;">Diff %</th>`;
+                }
+            });
+            headerHtml += '</tr>';
+            $('analysisResultsHead').innerHTML = headerHtml;
+
+            // Body
+            let bodyHtml = '';
+            scriptIds.forEach(scriptId => {
+                const script = scripts.find(s => s.id === scriptId);
+                const scriptName = script ? script.name : scriptId;
+
+                bodyHtml += `<tr><td>${scriptName}</td>`;
+
+                const baseVal = data.results['Base']?.[scriptId];
+
+                scenarioList.forEach(scenario => {
+                    const val = data.results[scenario]?.[scriptId];
+                    const isError = val && typeof val === 'object' && val.error;
+
+                    if (isError) {
+                        bodyHtml += `<td class="num" style="color: var(--danger);">Error</td>`;
+                    } else {
+                        bodyHtml += `<td class="num">${val !== null && val !== undefined ? fmt(Math.round(val)) : '-'}</td>`;
+                    }
+
+                    if (scenario !== 'Base') {
+                        const comp = data.comparison?.[scriptId]?.[scenario];
+                        if (comp && comp.diff_pct !== undefined) {
+                            const diffColor = comp.diff_pct < 0 ? 'var(--success)' : (comp.diff_pct > 0 ? 'var(--danger)' : 'var(--text-muted)');
+                            const sign = comp.diff_pct > 0 ? '+' : '';
+                            bodyHtml += `<td class="num" style="color: ${diffColor}; font-size: 11px;">${sign}${comp.diff_pct.toFixed(2)}%</td>`;
+                        } else {
+                            bodyHtml += `<td class="num">-</td>`;
+                        }
+                    }
+                });
+
+                bodyHtml += '</tr>';
+            });
+
+            $('analysisResultsBody').innerHTML = bodyHtml;
+        }
+
+        async function writeToOracle() {
+            if (!oracleConnected) {
+                toast('Connect to Oracle first', 'error');
+                openModal('settingsModal');
+                return;
+            }
+
+            if (!dataLoaded) {
+                toast('Load data first', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const res = await fetch('/api/oracle/write-cashflows', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    toast(`Written ${data.rows_written} rows to Oracle`);
+                } else {
+                    toast(data.error || 'Failed to write', 'error');
+                }
+            } catch (e) {
+                toast('Failed to write to Oracle', 'error');
+            }
+            showLoading(false);
+        }
+
+        function exportAnalysisResults() {
+            if (!lastAnalysisResults) {
+                toast('No results to export', 'error');
+                return;
+            }
+            // TODO: Implement Excel export
+            toast('Export feature coming soon', 'error');
+        }
+
+        // Update showPage to handle new pages
+        const originalShowPage = showPage;
+        showPage = function(pageName) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            $(pageName + 'Page').classList.add('active');
+            document.querySelectorAll('.nav-btn[data-page]').forEach(btn => btn.classList.toggle('active', btn.dataset.page === pageName));
+            $('headerTitle').textContent = {
+                dashboard: 'Dashboard',
+                scenarios: 'Scenarios',
+                scripts: 'SQL Scripts',
+                analysis: 'Analysis'
+            }[pageName] || 'Dashboard';
+
+            if (pageName === 'scenarios' && dataLoaded) {
+                loadQuarterlyChart();
+            }
+            if (pageName === 'scripts') {
+                loadScripts();
+            }
+            if (pageName === 'analysis') {
+                updateAnalysisScenarioSelect();
+                updateAnalysisScriptSelect();
+            }
+        };
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            checkOracleStatus();
+            loadScripts();
         });
     </script>
 </body>

@@ -3,25 +3,13 @@
     {
       "id": "ultimate_reserve",
       "name": "Ultimate Reserve",
-      "description": "Calculates total ultimate reserve using cashflow pattern weights",
-      "sql": "SELECT SUM(paid_amount * weight) AS ultimate_reserve\nFROM claims_data c\nJOIN CASHFLOW_PATTERNS cp ON cp.RUN_ID = :run_id AND cp.SCENARIO_NAME = :scenario_name\nWHERE c.valuation_date = :val_date",
+      "description": "Calculates total ultimate reserve using 180 monthly cashflow pattern weights",
+      "sql": "SELECT SUM(paid_amount * cf.WEIGHT) AS ultimate_reserve\nFROM claims_data c\nJOIN &cf_pattern. cf ON cf.RUN_ID = '&run_id.' AND cf.SCENARIO_NAME = '&scenario_name.'\nWHERE c.valuation_date = TO_DATE('&report_date.', 'YYYY-MM-DD')",
       "parameters": [
         {
-          "name": "run_id",
-          "type": "text",
-          "description": "Cashflow run identifier",
-          "required": true
-        },
-        {
-          "name": "scenario_name",
-          "type": "text",
-          "description": "Scenario name (Base or scenario)",
-          "required": true
-        },
-        {
-          "name": "val_date",
+          "name": "report_date",
           "type": "date",
-          "description": "Valuation date",
+          "description": "Valuation/Report date (YYYY-MM-DD)",
           "default": "2024-09-30",
           "required": true
         }
@@ -32,25 +20,13 @@
     {
       "id": "ibnr_calculation",
       "name": "IBNR Calculation",
-      "description": "Calculates Incurred But Not Reported reserves",
-      "sql": "SELECT SUM(reserve_amount * weight * :tail_factor) AS ibnr\nFROM reserves_data r\nJOIN CASHFLOW_PATTERNS cp ON cp.RUN_ID = :run_id AND cp.SCENARIO_NAME = :scenario_name\nWHERE r.valuation_date = :val_date",
+      "description": "Calculates Incurred But Not Reported reserves with tail factor",
+      "sql": "SELECT SUM(reserve_amount * cf.WEIGHT * &tail_factor.) AS ibnr\nFROM reserves_data r\nJOIN &cf_pattern. cf ON cf.RUN_ID = '&run_id.' AND cf.SCENARIO_NAME = '&scenario_name.'\nWHERE r.valuation_date = TO_DATE('&report_date.', 'YYYY-MM-DD')",
       "parameters": [
         {
-          "name": "run_id",
-          "type": "text",
-          "description": "Cashflow run identifier",
-          "required": true
-        },
-        {
-          "name": "scenario_name",
-          "type": "text",
-          "description": "Scenario name",
-          "required": true
-        },
-        {
-          "name": "val_date",
+          "name": "report_date",
           "type": "date",
-          "description": "Valuation date",
+          "description": "Valuation/Report date (YYYY-MM-DD)",
           "default": "2024-09-30",
           "required": true
         },
@@ -68,25 +44,13 @@
     {
       "id": "discounted_cashflow",
       "name": "Discounted Cashflow",
-      "description": "Calculates present value of future cashflows",
-      "sql": "SELECT SUM(amount * weight / POWER(1 + :discount_rate, quarter/4)) AS pv_cashflow\nFROM cashflow_data c\nJOIN CASHFLOW_PATTERNS cp ON cp.RUN_ID = :run_id AND cp.SCENARIO_NAME = :scenario_name AND cp.QUARTER = c.quarter\nWHERE c.valuation_date = :val_date",
+      "description": "Calculates present value of future cashflows using monthly discount",
+      "sql": "SELECT SUM(amount * cf.WEIGHT / POWER(1 + &discount_rate./12, cf.MONTH_NUM)) AS pv_cashflow\nFROM cashflow_data c\nJOIN &cf_pattern. cf ON cf.RUN_ID = '&run_id.' AND cf.SCENARIO_NAME = '&scenario_name.' AND cf.MONTH_NUM = c.month_num\nWHERE c.valuation_date = TO_DATE('&report_date.', 'YYYY-MM-DD')",
       "parameters": [
         {
-          "name": "run_id",
-          "type": "text",
-          "description": "Cashflow run identifier",
-          "required": true
-        },
-        {
-          "name": "scenario_name",
-          "type": "text",
-          "description": "Scenario name",
-          "required": true
-        },
-        {
-          "name": "val_date",
+          "name": "report_date",
           "type": "date",
-          "description": "Valuation date",
+          "description": "Valuation/Report date (YYYY-MM-DD)",
           "default": "2024-09-30",
           "required": true
         },
@@ -98,6 +62,15 @@
           "required": true
         }
       ],
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "weighted_duration",
+      "name": "Weighted Duration",
+      "description": "Calculates weighted average duration of cashflows in months",
+      "sql": "SELECT SUM(cf.MONTH_NUM * cf.WEIGHT) / SUM(cf.WEIGHT) AS weighted_duration\nFROM &cf_pattern. cf\nWHERE cf.RUN_ID = '&run_id.' AND cf.SCENARIO_NAME = '&scenario_name.'",
+      "parameters": [],
       "created_at": "2024-01-01T00:00:00Z",
       "updated_at": "2024-01-01T00:00:00Z"
     }

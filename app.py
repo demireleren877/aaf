@@ -1105,9 +1105,82 @@ def oracle_fetch_data():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/oracle/load-and-calculate', methods=['POST'])
+def oracle_load_and_calculate():
+    """Oracle'dan veri çek ve base cashflow hesapla"""
+    try:
+        if not oracle_db.is_connected():
+            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
+
+        data = request.json
+        table_name = data.get('table')
+        query = data.get('query')
+
+        # Fetch data from Oracle
+        if query:
+            df_original = oracle_db.execute_query(query)
+        elif table_name:
+            df_original = oracle_db.execute_query(f"SELECT * FROM {table_name}")
+        else:
+            return jsonify({'success': False, 'error': 'Tablo adı veya sorgu gerekli'}), 400
+
+        # Check required columns
+        required_cols = ['CLAIM_NO', 'ORIGIN_YEAR', 'YEARMONTH', 'PAID_TL', 'OS_TL']
+        missing_cols = [col for col in required_cols if col not in df_original.columns]
+        if missing_cols:
+            return jsonify({
+                'success': False,
+                'error': f'Eksik kolonlar: {", ".join(missing_cols)}. Gerekli kolonlar: {", ".join(required_cols)}'
+            }), 400
+
+        # Session temizle
+        session.clear()
+
+        # Store dataframe in memory
+        current_data['df'] = df_original
+        current_data['file_path'] = 'oracle_query'
+
+        # Base cashflow hesapla
+        df_base = convert_to_cashflow_format(df_original)
+        base_data = calculate_cashflow_pattern(df_base, 'base_cashflow', OUTPUT_DIR)
+
+        # Özet bilgileri
+        total_rows = len(df_original)
+        unique_claims = df_original['CLAIM_NO'].nunique()
+        years = sorted(df_original['ORIGIN_YEAR'].unique().tolist())
+
+        # En son YEARMONTH'u bul
+        max_yearmonth = df_original['YEARMONTH'].max()
+        df_latest = df_original[df_original['YEARMONTH'] == max_yearmonth]
+        total_paid = df_latest['PAID_TL'].sum()
+        total_os = df_latest['OS_TL'].sum()
+
+        # Session'a kaydet
+        session['data_loaded'] = True
+        session['scenarios'] = []
+
+        return jsonify({
+            'success': True,
+            'message': f'Oracle\'dan {len(df_original)} satır veri yüklendi ve base cashflow hesaplandı',
+            'stats': {
+                'total_rows': total_rows,
+                'unique_claims': unique_claims,
+                'years': [int(y) for y in years],
+                'latest_yearmonth': int(max_yearmonth),
+                'total_paid': float(total_paid),
+                'total_os': float(total_os),
+                'base_file': 'base_cashflow.xlsx'
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/oracle/write-cashflows', methods=['POST'])
 def oracle_write_cashflows():
-    """Cashflow pattern'ları Oracle'a yaz"""
+    """180 aylık cashflow pattern'ları Oracle'a yaz"""
     try:
         if not oracle_db.is_connected():
             return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
@@ -1123,36 +1196,92 @@ def oracle_write_cashflows():
 
         written = {}
 
-        # Write base if requested
+        # Write base if requested (180 monthly pattern)
         if 'Base' in scenarios_to_write:
-            base_pattern = pd.read_excel(base_file, sheet_name='cashflow pattern')
-            # Get average across all years
-            avg_pattern = base_pattern.groupby('Period')['Normalize Ağırlık'].mean()
-            quarters = [f"Q{int(p)}" for p in sorted(avg_pattern.index)]
-            weights = [float(avg_pattern[p]) for p in sorted(avg_pattern.index)]
+            try:
+                # Try to read 180 monthly pattern sheet
+                monthly_pattern = pd.read_excel(base_file, sheet_name='180 aylık pattern')
 
-            rows = oracle_db.write_cashflow_patterns(run_id, 'Base', quarters, weights)
-            written['Base'] = rows
+                # Find the weight column
+                weight_col = None
+                for col in monthly_pattern.columns:
+                    if 'ağırlık' in col.lower() or 'weight' in col.lower():
+                        weight_col = col
+                        break
 
-        # Write scenarios
+                if weight_col is None:
+                    # Find first numeric column
+                    for col in monthly_pattern.columns:
+                        if monthly_pattern[col].dtype in ['float64', 'int64']:
+                            weight_col = col
+                            break
+
+                if weight_col:
+                    months = list(range(1, len(monthly_pattern) + 1))
+                    weights = [float(monthly_pattern[weight_col].iloc[i]) if pd.notna(monthly_pattern[weight_col].iloc[i]) else 0.0
+                               for i in range(len(monthly_pattern))]
+
+                    rows = oracle_db.write_cashflow_patterns(run_id, 'Base', months, weights)
+                    written['Base'] = rows
+                else:
+                    return jsonify({'success': False, 'error': 'Weight column bulunamadı'}), 400
+
+            except ValueError:
+                # Fallback to quarterly pattern if monthly not available
+                base_pattern = pd.read_excel(base_file, sheet_name='cashflow pattern')
+                avg_pattern = base_pattern.groupby('Period')['Normalize Ağırlık'].mean()
+                months = list(range(1, len(avg_pattern) + 1))
+                weights = [float(avg_pattern.iloc[i]) for i in range(len(avg_pattern))]
+
+                rows = oracle_db.write_cashflow_patterns(run_id, 'Base', months, weights)
+                written['Base'] = rows
+
+        # Write scenarios (180 monthly patterns)
         session_scenarios = session.get('scenarios', [])
         for scenario in session_scenarios:
             if scenario['name'] in scenarios_to_write:
                 scenario_file = os.path.join(OUTPUT_DIR, f"scenario_{scenario['name']}.xlsx")
                 if os.path.exists(scenario_file):
-                    scenario_pattern = pd.read_excel(scenario_file, sheet_name='cashflow pattern')
-                    avg_pattern = scenario_pattern.groupby('Period')['Normalize Ağırlık'].mean()
-                    quarters = [f"Q{int(p)}" for p in sorted(avg_pattern.index)]
-                    weights = [float(avg_pattern[p]) for p in sorted(avg_pattern.index)]
+                    try:
+                        # Try to read 180 monthly pattern sheet
+                        monthly_pattern = pd.read_excel(scenario_file, sheet_name='180 aylık pattern')
 
-                    rows = oracle_db.write_cashflow_patterns(run_id, scenario['name'], quarters, weights)
-                    written[scenario['name']] = rows
+                        # Find the weight column
+                        weight_col = None
+                        for col in monthly_pattern.columns:
+                            if 'ağırlık' in col.lower() or 'weight' in col.lower():
+                                weight_col = col
+                                break
+
+                        if weight_col is None:
+                            for col in monthly_pattern.columns:
+                                if monthly_pattern[col].dtype in ['float64', 'int64']:
+                                    weight_col = col
+                                    break
+
+                        if weight_col:
+                            months = list(range(1, len(monthly_pattern) + 1))
+                            weights = [float(monthly_pattern[weight_col].iloc[i]) if pd.notna(monthly_pattern[weight_col].iloc[i]) else 0.0
+                                       for i in range(len(monthly_pattern))]
+
+                            rows = oracle_db.write_cashflow_patterns(run_id, scenario['name'], months, weights)
+                            written[scenario['name']] = rows
+
+                    except ValueError:
+                        # Fallback to quarterly pattern
+                        scenario_pattern = pd.read_excel(scenario_file, sheet_name='cashflow pattern')
+                        avg_pattern = scenario_pattern.groupby('Period')['Normalize Ağırlık'].mean()
+                        months = list(range(1, len(avg_pattern) + 1))
+                        weights = [float(avg_pattern.iloc[i]) for i in range(len(avg_pattern))]
+
+                        rows = oracle_db.write_cashflow_patterns(run_id, scenario['name'], months, weights)
+                        written[scenario['name']] = rows
 
         return jsonify({
             'success': True,
             'run_id': run_id,
             'written': written,
-            'message': f'{sum(written.values())} satır yazıldı'
+            'message': f'{sum(written.values())} satır yazıldı ({len(written)} senaryo)'
         })
     except Exception as e:
         import traceback
@@ -1225,7 +1354,11 @@ def test_script(script_id):
         data = request.json
         params = data.get('params', {})
 
-        result = analysis_engine.execute_script(script_id, params)
+        script = script_manager.get_by_id(script_id)
+        if not script:
+            return jsonify({'success': False, 'error': 'Script bulunamadı'}), 404
+
+        result = analysis_engine.execute_script_with_params(script, params)
         return jsonify({
             'success': True,
             'result': result
@@ -1236,13 +1369,40 @@ def test_script(script_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/scripts/reorder', methods=['POST'])
+def reorder_scripts():
+    """Script sırasını değiştir"""
+    try:
+        data = request.json
+        script_ids = data.get('script_ids', [])
+
+        if not script_ids:
+            return jsonify({'success': False, 'error': 'Script ID listesi gerekli'}), 400
+
+        script_manager.reorder(script_ids)
+        return jsonify({
+            'success': True,
+            'message': 'Script sırası güncellendi'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # =====================================================
 # Analysis API Endpoints
 # =====================================================
 
 @app.route('/api/analysis/run', methods=['POST'])
 def run_analysis():
-    """Batch analiz çalıştır"""
+    """
+    Batch analiz çalıştır - 180 aylık CF pattern'ları ile
+
+    Flow:
+    1. Seçilen senaryoların 180 aylık CF pattern'larını Oracle'a yaz
+    2. Her senaryo için scriptleri sırayla çalıştır
+    3. &cf_pattern, &scenario_name, &run_id parametrelerini substitue et
+    4. Sonuçları ANALYSIS_RESULTS tablosuna kaydet
+    """
     try:
         if not oracle_db.is_connected():
             return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
@@ -1256,40 +1416,81 @@ def run_analysis():
         if not script_ids:
             return jsonify({'success': False, 'error': 'En az bir script seçin'}), 400
 
-        # Prepare cashflows if needed
-        cashflows = None
+        # Generate run ID
+        run_id = analysis_engine.generate_run_id()
+
+        # Prepare and write 180 monthly cashflows to Oracle
         if write_cashflows:
-            cashflows = {}
-
-            # Base cashflow
             base_file = os.path.join(OUTPUT_DIR, 'base_cashflow.xlsx')
-            if os.path.exists(base_file) and 'Base' in scenarios:
-                base_pattern = pd.read_excel(base_file, sheet_name='cashflow pattern')
-                avg_pattern = base_pattern.groupby('Period')['Normalize Ağırlık'].mean()
-                cashflows['Base'] = {
-                    'quarters': [f"Q{int(p)}" for p in sorted(avg_pattern.index)],
-                    'weights': [float(avg_pattern[p]) for p in sorted(avg_pattern.index)]
-                }
 
-            # Scenario cashflows
+            # Write Base cashflow (180 monthly)
+            if 'Base' in scenarios and os.path.exists(base_file):
+                try:
+                    monthly_pattern = pd.read_excel(base_file, sheet_name='180 aylık pattern')
+                    weight_col = None
+                    for col in monthly_pattern.columns:
+                        if 'ağırlık' in col.lower() or 'weight' in col.lower():
+                            weight_col = col
+                            break
+                    if weight_col is None:
+                        for col in monthly_pattern.columns:
+                            if monthly_pattern[col].dtype in ['float64', 'int64']:
+                                weight_col = col
+                                break
+
+                    if weight_col:
+                        months = list(range(1, len(monthly_pattern) + 1))
+                        weights = [float(monthly_pattern[weight_col].iloc[i]) if pd.notna(monthly_pattern[weight_col].iloc[i]) else 0.0
+                                   for i in range(len(monthly_pattern))]
+                        oracle_db.write_cashflow_patterns(run_id, 'Base', months, weights)
+                except ValueError:
+                    # Fallback to quarterly pattern
+                    base_pattern = pd.read_excel(base_file, sheet_name='cashflow pattern')
+                    avg_pattern = base_pattern.groupby('Period')['Normalize Ağırlık'].mean()
+                    months = list(range(1, len(avg_pattern) + 1))
+                    weights = [float(avg_pattern.iloc[i]) for i in range(len(avg_pattern))]
+                    oracle_db.write_cashflow_patterns(run_id, 'Base', months, weights)
+
+            # Write scenario cashflows (180 monthly)
             session_scenarios = session.get('scenarios', [])
             for scenario in session_scenarios:
                 if scenario['name'] in scenarios:
                     scenario_file = os.path.join(OUTPUT_DIR, f"scenario_{scenario['name']}.xlsx")
                     if os.path.exists(scenario_file):
-                        scenario_pattern = pd.read_excel(scenario_file, sheet_name='cashflow pattern')
-                        avg_pattern = scenario_pattern.groupby('Period')['Normalize Ağırlık'].mean()
-                        cashflows[scenario['name']] = {
-                            'quarters': [f"Q{int(p)}" for p in sorted(avg_pattern.index)],
-                            'weights': [float(avg_pattern[p]) for p in sorted(avg_pattern.index)]
-                        }
+                        try:
+                            monthly_pattern = pd.read_excel(scenario_file, sheet_name='180 aylık pattern')
+                            weight_col = None
+                            for col in monthly_pattern.columns:
+                                if 'ağırlık' in col.lower() or 'weight' in col.lower():
+                                    weight_col = col
+                                    break
+                            if weight_col is None:
+                                for col in monthly_pattern.columns:
+                                    if monthly_pattern[col].dtype in ['float64', 'int64']:
+                                        weight_col = col
+                                        break
 
-        # Run analysis
-        result = analysis_engine.run_analysis(
+                            if weight_col:
+                                months = list(range(1, len(monthly_pattern) + 1))
+                                weights = [float(monthly_pattern[weight_col].iloc[i]) if pd.notna(monthly_pattern[weight_col].iloc[i]) else 0.0
+                                           for i in range(len(monthly_pattern))]
+                                oracle_db.write_cashflow_patterns(run_id, scenario['name'], months, weights)
+                        except ValueError:
+                            # Fallback to quarterly pattern
+                            scenario_pattern = pd.read_excel(scenario_file, sheet_name='cashflow pattern')
+                            avg_pattern = scenario_pattern.groupby('Period')['Normalize Ağırlık'].mean()
+                            months = list(range(1, len(avg_pattern) + 1))
+                            weights = [float(avg_pattern.iloc[i]) for i in range(len(avg_pattern))]
+                            oracle_db.write_cashflow_patterns(run_id, scenario['name'], months, weights)
+
+        # Run sequential analysis
+        # Scripts will use &cf_pattern (CF_PATTERNS table), &scenario_name, &run_id for filtering
+        result = analysis_engine.run_sequential_analysis(
             scenarios=scenarios,
             script_ids=script_ids,
             user_params=params,
-            cashflows=cashflows
+            cf_table_name='CF_PATTERNS',
+            run_id=run_id
         )
 
         # Format for display

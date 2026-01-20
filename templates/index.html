@@ -428,27 +428,79 @@
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
                                 </div>
                                 <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">Cashflow Pattern Analysis</h2>
-                                <p style="font-size: 13px; color: var(--text-muted); max-width: 400px; margin: 0 auto 24px;">Upload your data to analyze cashflow patterns and create what-if scenarios.</p>
+                                <p style="font-size: 13px; color: var(--text-muted); max-width: 500px; margin: 0 auto 24px;">Load your data from file or Oracle database to analyze cashflow patterns and create what-if scenarios.</p>
 
-                                <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()" style="max-width: 400px; margin: 0 auto;">
-                                    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileSelect(event)">
-                                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                                    </svg>
-                                    <div class="upload-title">Click to upload or drag & drop</div>
-                                    <div class="upload-desc">CSV or Excel files</div>
+                                <!-- Data Source Tabs -->
+                                <div class="tabs" style="justify-content: center; margin-bottom: 24px;">
+                                    <button class="tab active" data-source="file" onclick="switchDataSource('file')">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="margin-right: 6px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                                        File Upload
+                                    </button>
+                                    <button class="tab" data-source="oracle" onclick="switchDataSource('oracle')">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="margin-right: 6px;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3M21 5v14c0 1.66-4 3-9 3s-9-1.34-9-3V5"/></svg>
+                                        Oracle Database
+                                    </button>
                                 </div>
 
-                                <div id="fileInfo" style="display: none; margin-top: 16px;">
-                                    <div style="display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--bg-tertiary); border-radius: var(--radius);">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
-                                        <span id="fileName" style="font-size: 13px;">-</span>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" width="16" height="16"><path d="M22 11.08V12a10 10 0 11-5.93-9.14M22 4L12 14.01l-3-3"/></svg>
+                                <!-- File Upload Section -->
+                                <div id="fileUploadSection" style="max-width: 400px; margin: 0 auto;">
+                                    <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                                        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileSelect(event)">
+                                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                                        </svg>
+                                        <div class="upload-title">Click to upload or drag & drop</div>
+                                        <div class="upload-desc">CSV or Excel files</div>
                                     </div>
-                                    <div style="margin-top: 16px;">
-                                        <button class="btn btn-primary" onclick="processData()">
-                                            Process Data
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+
+                                    <div id="fileInfo" style="display: none; margin-top: 16px;">
+                                        <div style="display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--bg-tertiary); border-radius: var(--radius);">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                                            <span id="fileName" style="font-size: 13px;">-</span>
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" width="16" height="16"><path d="M22 11.08V12a10 10 0 11-5.93-9.14M22 4L12 14.01l-3-3"/></svg>
+                                        </div>
+                                        <div style="margin-top: 16px;">
+                                            <button class="btn btn-primary" onclick="processData()">
+                                                Process Data
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Oracle Database Section -->
+                                <div id="oracleLoadSection" style="display: none; max-width: 500px; margin: 0 auto;">
+                                    <div id="oracleNotConnected" style="padding: 24px; background: var(--bg-tertiary); border-radius: var(--radius); margin-bottom: 16px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" width="24" height="24" style="margin-bottom: 12px;"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Connect to Oracle database first</p>
+                                        <button class="btn btn-secondary btn-sm" onclick="openModal('settingsModal')">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                                            Open Settings
+                                        </button>
+                                    </div>
+
+                                    <div id="oracleConnectedForm" style="display: none;">
+                                        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: rgba(16, 185, 129, 0.1); border-radius: var(--radius); margin-bottom: 16px;">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" width="16" height="16"><path d="M22 11.08V12a10 10 0 11-5.93-9.14M22 4L12 14.01l-3-3"/></svg>
+                                            <span style="font-size: 12px; color: var(--success);">Connected to Oracle</span>
+                                        </div>
+
+                                        <div class="form-group" style="text-align: left; margin-bottom: 16px;">
+                                            <label class="form-label">Select Table or Write Query</label>
+                                            <select class="form-input form-select" id="oracleTableSelect" onchange="onTableSelect()">
+                                                <option value="">-- Select a table --</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-group" style="text-align: left; margin-bottom: 16px;">
+                                            <label class="form-label">Or Custom SQL Query</label>
+                                            <textarea class="form-input" id="oracleQueryInput" rows="3" placeholder="SELECT * FROM your_table WHERE ..."></textarea>
+                                            <div class="form-hint">Required columns: CLAIM_NO, ORIGIN_YEAR, YEARMONTH, PAID_TL, OS_TL</div>
+                                        </div>
+
+                                        <button class="btn btn-primary" onclick="loadFromOracle()">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg>
+                                            Load Data from Oracle
                                         </button>
                                     </div>
                                 </div>
@@ -2228,6 +2280,9 @@ WHERE run_id = :run_id
                 if (writeOracleBtn) writeOracleBtn.disabled = true;
                 if (runAnalysisBtn) runAnalysisBtn.disabled = true;
             }
+
+            // Update Oracle load section in welcome screen
+            updateOracleLoadSection();
         }
 
         async function checkOracleStatus() {
@@ -2237,7 +2292,120 @@ WHERE run_id = :run_id
                 if (data.connected) {
                     updateOracleStatus(true, data);
                 }
+                // Update Oracle load section visibility
+                updateOracleLoadSection();
             } catch (e) { }
+        }
+
+        // ===== Data Source Functions =====
+        function switchDataSource(source) {
+            // Update tabs
+            document.querySelectorAll('.tab[data-source]').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.source === source);
+            });
+
+            // Show/hide sections
+            const fileSection = $('fileUploadSection');
+            const oracleSection = $('oracleLoadSection');
+
+            if (source === 'file') {
+                fileSection.style.display = 'block';
+                oracleSection.style.display = 'none';
+            } else {
+                fileSection.style.display = 'none';
+                oracleSection.style.display = 'block';
+                updateOracleLoadSection();
+            }
+        }
+
+        function updateOracleLoadSection() {
+            const notConnected = $('oracleNotConnected');
+            const connectedForm = $('oracleConnectedForm');
+
+            if (oracleConnected) {
+                notConnected.style.display = 'none';
+                connectedForm.style.display = 'block';
+                loadOracleTables();
+            } else {
+                notConnected.style.display = 'block';
+                connectedForm.style.display = 'none';
+            }
+        }
+
+        async function loadOracleTables() {
+            try {
+                const res = await fetch('/api/oracle/tables');
+                const data = await res.json();
+                if (data.success) {
+                    const select = $('oracleTableSelect');
+                    select.innerHTML = '<option value="">-- Select a table --</option>';
+                    data.tables.forEach(table => {
+                        select.innerHTML += `<option value="${table}">${table}</option>`;
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to load tables', e);
+            }
+        }
+
+        function onTableSelect() {
+            const table = $('oracleTableSelect').value;
+            if (table) {
+                $('oracleQueryInput').value = `SELECT * FROM ${table}`;
+            }
+        }
+
+        async function loadFromOracle() {
+            const table = $('oracleTableSelect').value;
+            const query = $('oracleQueryInput').value.trim();
+
+            if (!table && !query) {
+                toast('Select a table or enter a query', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const res = await fetch('/api/oracle/load-and-calculate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        table: table || null,
+                        query: query || null
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    toast(data.message);
+                    dataLoaded = true;
+
+                    // Update dashboard stats
+                    $('dashStatRows').textContent = fmt(data.stats.total_rows);
+                    $('dashStatClaims').textContent = fmt(data.stats.unique_claims);
+                    $('dashStatPaid').textContent = (data.stats.total_paid / 1000000).toFixed(1);
+                    $('dashStatOS').textContent = (data.stats.total_os / 1000000).toFixed(1);
+
+                    // Show dashboard content
+                    $('welcomeSection').style.display = 'none';
+                    $('dashboardContent').style.display = 'block';
+
+                    // Load charts and summary
+                    loadYearSummary();
+
+                    // Enable buttons
+                    const writeOracleBtn = $('writeOracleBtn');
+                    const runAnalysisBtn = $('runAnalysisBtn');
+                    if (writeOracleBtn) writeOracleBtn.disabled = false;
+                    if (runAnalysisBtn) runAnalysisBtn.disabled = false;
+                } else {
+                    toast(data.error || 'Failed to load data', 'error');
+                }
+            } catch (e) {
+                toast('Failed to load data from Oracle', 'error');
+                console.error(e);
+            }
+            showLoading(false);
         }
 
         // ===== SQL Scripts Functions =====
@@ -2525,6 +2693,12 @@ WHERE run_id = :run_id
         }
 
         async function runAnalysis() {
+            if (!oracleConnected) {
+                toast('Connect to Oracle first', 'error');
+                openModal('settingsModal');
+                return;
+            }
+
             const selectedScenarios = multiSelectInstances['analysisScenarioMultiSelect']?.getSelected() || [];
             const selectedScriptNames = multiSelectInstances['analysisScriptMultiSelect']?.getSelected() || [];
             const valDate = $('analysisValDate').value;
@@ -2534,17 +2708,23 @@ WHERE run_id = :run_id
                 return;
             }
 
-            // Get script IDs from names
+            // Get script IDs from names - preserve the order from UI
             const scriptIds = selectedScriptNames.map(name => {
                 const script = scripts.find(s => s.name === name);
                 return script ? script.id : null;
             }).filter(id => id);
 
-            // Collect custom params
-            const userParams = { val_date: valDate };
+            // Collect custom params - use report_date instead of val_date
+            const userParams = { report_date: valDate };
             document.querySelectorAll('.analysis-param').forEach(input => {
                 const paramName = input.id.replace('param_', '');
-                userParams[paramName] = input.value;
+                const val = input.value;
+                // Convert to number if needed
+                if (input.type === 'number' && val !== '') {
+                    userParams[paramName] = parseFloat(val);
+                } else {
+                    userParams[paramName] = val;
+                }
             });
 
             // Scenarios: Base + selected
@@ -2557,8 +2737,9 @@ WHERE run_id = :run_id
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         scenarios: scenarioList,
-                        script_ids: scriptIds,
-                        parameters: userParams
+                        scripts: scriptIds,
+                        params: userParams,
+                        write_cashflows: true
                     })
                 });
                 const data = await res.json();
@@ -2566,7 +2747,7 @@ WHERE run_id = :run_id
                 if (data.success) {
                     lastAnalysisResults = data;
                     renderAnalysisResults(data);
-                    toast('Analysis completed');
+                    toast(`Analysis completed! Run ID: ${data.run_id}`);
                 } else {
                     toast(data.error || 'Analysis failed', 'error');
                 }
@@ -2650,17 +2831,23 @@ WHERE run_id = :run_id
                 return;
             }
 
+            // Get selected scenarios (or all if none selected)
+            const selectedScenarios = multiSelectInstances['analysisScenarioMultiSelect']?.getSelected() || [];
+            const scenarioList = ['Base', ...selectedScenarios.length > 0 ? selectedScenarios : scenarios.map(s => s.name)];
+
             showLoading(true);
             try {
                 const res = await fetch('/api/oracle/write-cashflows', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
+                    body: JSON.stringify({
+                        scenarios: scenarioList
+                    })
                 });
                 const data = await res.json();
 
                 if (data.success) {
-                    toast(`Written ${data.rows_written} rows to Oracle`);
+                    toast(`${data.message} (Run ID: ${data.run_id})`);
                 } else {
                     toast(data.error || 'Failed to write', 'error');
                 }

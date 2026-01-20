@@ -4,6 +4,7 @@ Handles batch execution of SQL scripts and result comparison
 """
 import json
 import uuid
+import re
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pathlib import Path
@@ -87,6 +88,23 @@ class ScriptManager:
                 return True
         return False
 
+    def reorder(self, script_ids: List[str]) -> bool:
+        """Reorder scripts by given ID list"""
+        new_order = []
+        for sid in script_ids:
+            script = self.get_by_id(sid)
+            if script:
+                new_order.append(script)
+
+        # Add any remaining scripts not in the list
+        for script in self.scripts:
+            if script['id'] not in script_ids:
+                new_order.append(script)
+
+        self.scripts = new_order
+        self.save_scripts()
+        return True
+
 
 class AnalysisEngine:
     """Executes analysis scripts and compares results"""
@@ -103,62 +121,39 @@ class AnalysisEngine:
         """Generate unique run ID"""
         return f"RUN_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
 
-    def prepare_parameters(self, script: Dict, user_params: Dict,
-                          run_id: str, scenario_name: str) -> Dict:
+    def substitute_parameters(self, sql: str, params: Dict) -> str:
         """
-        Prepare parameters for script execution
+        Replace &parameter placeholders with actual values
+
+        Args:
+            sql: SQL string with &param placeholders
+            params: Dict of parameter values
+
+        Returns:
+            Processed SQL string
+        """
+        processed_sql = sql
+        if params:
+            for key, value in params.items():
+                # Handle both &param and &param. syntax
+                pattern = r'&' + re.escape(key) + r'\.?'
+                if isinstance(value, str):
+                    # Check if it's a table/column name (no quotes) or a value (needs quotes)
+                    if key in ['cf_pattern', 'table_name', 'schema']:
+                        processed_sql = re.sub(pattern, str(value), processed_sql)
+                    else:
+                        processed_sql = re.sub(pattern, f"'{value}'", processed_sql)
+                else:
+                    processed_sql = re.sub(pattern, str(value), processed_sql)
+        return processed_sql
+
+    def execute_script_with_params(self, script: Dict, params: Dict) -> Any:
+        """
+        Execute a single script with parameter substitution
 
         Args:
             script: Script definition
-            user_params: User-provided parameters
-            run_id: Current run ID
-            scenario_name: Current scenario name
-
-        Returns:
-            Complete parameter dict
-        """
-        params = {}
-
-        # Add system parameters
-        params['run_id'] = run_id
-        params['scenario_name'] = scenario_name
-
-        # Process script parameters
-        for param_def in script.get('parameters', []):
-            name = param_def['name']
-
-            # Skip system params already set
-            if name in ['run_id', 'scenario_name']:
-                continue
-
-            # Use user value or default
-            if name in user_params:
-                value = user_params[name]
-            elif 'default' in param_def:
-                value = param_def['default']
-            else:
-                value = None
-
-            # Type conversion
-            param_type = param_def.get('type', 'text')
-            if value is not None:
-                if param_type == 'number':
-                    value = float(value)
-                elif param_type == 'date':
-                    # Keep as string, Oracle will handle
-                    pass
-
-            params[name] = value
-
-        return params
-
-    def execute_script(self, script_id: str, params: Dict) -> Any:
-        """
-        Execute a single script
-
-        Args:
-            script_id: Script identifier
-            params: Execution parameters
+            params: Execution parameters (including &cf_pattern)
 
         Returns:
             Script result value
@@ -166,66 +161,61 @@ class AnalysisEngine:
         if not self.oracle or not self.oracle.is_connected():
             raise Exception("Oracle not connected")
 
-        script = self.script_manager.get_by_id(script_id)
-        if not script:
-            raise Exception(f"Script not found: {script_id}")
-
         sql = script['sql']
-        result = self.oracle.execute_script(sql, params)
 
+        # Substitute &parameters
+        processed_sql = self.substitute_parameters(sql, params)
+
+        # Execute
+        result = self.oracle.execute_script(processed_sql)
         return result
 
-    def run_analysis(self, scenarios: List[str], script_ids: List[str],
-                     user_params: Dict, cashflows: Dict = None) -> Dict:
+    def run_sequential_analysis(self, scenarios: List[str], script_ids: List[str],
+                                 user_params: Dict, cf_table_name: str = 'CF_PATTERNS',
+                                 run_id: str = None) -> Dict:
         """
-        Run batch analysis for multiple scenarios and scripts
+        Run scripts sequentially for each scenario
 
         Args:
-            scenarios: List of scenario names (first is Base)
-            script_ids: List of script IDs to execute
-            user_params: User-provided parameters
-            cashflows: Dict of scenario cashflows {name: {quarters, weights}}
+            scenarios: List of scenario names (first should be 'Base')
+            script_ids: List of script IDs in execution order
+            user_params: User-provided parameters (report_date, etc.)
+            cf_table_name: Name of the CF patterns table
+            run_id: Optional run ID (will generate if not provided)
 
         Returns:
-            Results dict: {
-                'run_id': str,
-                'results': {scenario: {script: value}},
-                'comparison': {script: {scenario: value, diff, diff_pct}}
-            }
+            Results dict with all scenario results
         """
         if not self.oracle or not self.oracle.is_connected():
             raise Exception("Oracle not connected")
 
-        run_id = self.generate_run_id()
-        results = {}
+        if not run_id:
+            run_id = self.generate_run_id()
 
-        # Write cashflows to Oracle if provided
-        if cashflows:
-            for scenario_name, cf_data in cashflows.items():
-                self.oracle.write_cashflow_patterns(
-                    run_id=run_id,
-                    scenario_name=scenario_name,
-                    quarters=cf_data['quarters'],
-                    weights=cf_data['weights']
-                )
+        results = {}
+        all_script_results = []
 
         # Execute scripts for each scenario
         for scenario in scenarios:
             results[scenario] = {}
 
-            for script_id in script_ids:
+            for order, script_id in enumerate(script_ids, 1):
                 script = self.script_manager.get_by_id(script_id)
                 if not script:
                     continue
 
-                # Prepare parameters
-                params = self.prepare_parameters(
-                    script, user_params, run_id, scenario
-                )
+                # Build params with cf_pattern for this scenario
+                exec_params = {**user_params}
+
+                # The cf_pattern references the CF_PATTERNS table filtered by scenario
+                # Scripts should use: WHERE SCENARIO_NAME = '&scenario_name' AND RUN_ID = '&run_id'
+                exec_params['cf_pattern'] = cf_table_name
+                exec_params['scenario_name'] = scenario
+                exec_params['run_id'] = run_id
 
                 try:
                     # Execute script
-                    value = self.oracle.execute_script(script['sql'], params)
+                    value = self.execute_script_with_params(script, exec_params)
                     results[scenario][script_id] = value
 
                     # Save to Oracle
@@ -233,11 +223,31 @@ class AnalysisEngine:
                         run_id=run_id,
                         scenario_name=scenario,
                         script_name=script['name'],
+                        script_order=order,
                         result_value=float(value) if value else 0,
-                        parameters=params
+                        parameters=exec_params
                     )
+
+                    all_script_results.append({
+                        'scenario': scenario,
+                        'script_id': script_id,
+                        'script_name': script['name'],
+                        'order': order,
+                        'value': value,
+                        'status': 'success'
+                    })
+
                 except Exception as e:
                     results[scenario][script_id] = {'error': str(e)}
+                    all_script_results.append({
+                        'scenario': scenario,
+                        'script_id': script_id,
+                        'script_name': script['name'],
+                        'order': order,
+                        'value': None,
+                        'status': 'error',
+                        'error': str(e)
+                    })
 
         # Calculate comparison
         comparison = self.compare_results(results, scenarios[0] if scenarios else 'Base')
@@ -246,8 +256,50 @@ class AnalysisEngine:
             'run_id': run_id,
             'results': results,
             'comparison': comparison,
+            'execution_log': all_script_results,
             'executed_at': datetime.now().isoformat()
         }
+
+    def run_analysis(self, scenarios: List[str], script_ids: List[str],
+                     user_params: Dict, cashflows: Dict = None) -> Dict:
+        """
+        Run batch analysis for multiple scenarios and scripts
+        (Legacy method - redirects to sequential analysis)
+
+        Args:
+            scenarios: List of scenario names (first is Base)
+            script_ids: List of script IDs to execute
+            user_params: User-provided parameters
+            cashflows: Dict of scenario cashflows {name: {months, weights}}
+
+        Returns:
+            Results dict
+        """
+        if not self.oracle or not self.oracle.is_connected():
+            raise Exception("Oracle not connected")
+
+        run_id = self.generate_run_id()
+
+        # Write cashflows to Oracle if provided
+        if cashflows:
+            for scenario_name, cf_data in cashflows.items():
+                months = cf_data.get('months', list(range(1, 181)))
+                weights = cf_data.get('weights', [])
+                if weights:
+                    self.oracle.write_cashflow_patterns(
+                        run_id=run_id,
+                        scenario_name=scenario_name,
+                        months=months,
+                        weights=weights
+                    )
+
+        # Run sequential analysis
+        return self.run_sequential_analysis(
+            scenarios=scenarios,
+            script_ids=script_ids,
+            user_params=user_params,
+            run_id=run_id
+        )
 
     def compare_results(self, results: Dict, base_name: str = 'Base') -> Dict:
         """

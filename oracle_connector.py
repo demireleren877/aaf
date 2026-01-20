@@ -7,6 +7,7 @@ import pandas as pd
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import json
+import re
 
 
 class OracleConnector:
@@ -175,6 +176,46 @@ class OracleConnector:
         except Exception as e:
             raise Exception(f"Script execution error: {e}")
 
+    def execute_script_with_substitution(self, sql: str, params: Dict = None) -> Any:
+        """
+        Execute a script with &parameter substitution (like SQL*Plus)
+
+        Args:
+            sql: SQL query with &param syntax
+            params: Dict of parameter values
+
+        Returns:
+            Single value result
+        """
+        if not self.connection:
+            raise Exception("Not connected to database")
+
+        try:
+            # Replace &param with actual values
+            processed_sql = sql
+            if params:
+                for key, value in params.items():
+                    # Handle both &param and &param. syntax
+                    pattern = r'&' + re.escape(key) + r'\.?'
+                    if isinstance(value, str):
+                        # String values - add quotes if not already a table name
+                        if key == 'cf_pattern':
+                            # Table name - no quotes
+                            processed_sql = re.sub(pattern, str(value), processed_sql)
+                        else:
+                            processed_sql = re.sub(pattern, f"'{value}'", processed_sql)
+                    else:
+                        processed_sql = re.sub(pattern, str(value), processed_sql)
+
+            cursor = self.connection.cursor()
+            cursor.execute(processed_sql)
+            row = cursor.fetchone()
+            cursor.close()
+
+            return row[0] if row else None
+        except Exception as e:
+            raise Exception(f"Script execution error: {e}")
+
     def write_dataframe(self, df: pd.DataFrame, table_name: str,
                         if_exists: str = 'append') -> int:
         """
@@ -223,16 +264,16 @@ class OracleConnector:
             self.connection.rollback()
             raise Exception(f"Error writing to table: {e}")
 
-    def write_cashflow_patterns(self, run_id: str, scenario_name: str,
-                                 quarters: List[str], weights: List[float]) -> int:
+    def write_monthly_pattern(self, run_id: str, scenario_name: str,
+                              pattern_df: pd.DataFrame, table_name: str = 'CF_PATTERNS') -> int:
         """
-        Write cashflow pattern data to CASHFLOW_PATTERNS table
+        Write 180 monthly cashflow pattern to Oracle table
 
         Args:
             run_id: Unique run identifier
             scenario_name: Name of the scenario (Base or scenario name)
-            quarters: List of quarter labels (Q1, Q2, ...)
-            weights: List of weight values
+            pattern_df: DataFrame with monthly pattern data (180 rows)
+            table_name: Target table name
 
         Returns:
             Number of rows written
@@ -243,16 +284,120 @@ class OracleConnector:
         try:
             cursor = self.connection.cursor()
 
-            insert_sql = """
-                INSERT INTO CASHFLOW_PATTERNS (RUN_ID, SCENARIO_NAME, QUARTER, WEIGHT, CREATED_AT)
-                VALUES (:1, :2, :3, :4, :5)
+            # Create table if not exists
+            create_sql = f"""
+                BEGIN
+                    EXECUTE IMMEDIATE 'CREATE TABLE {table_name} (
+                        ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                        RUN_ID VARCHAR2(50) NOT NULL,
+                        SCENARIO_NAME VARCHAR2(100) NOT NULL,
+                        MONTH_NUM NUMBER(3) NOT NULL,
+                        WEIGHT NUMBER(18,10) NOT NULL,
+                        CUMULATIVE_WEIGHT NUMBER(18,10),
+                        CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )';
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        IF SQLCODE = -955 THEN NULL; END IF;
+                END;
+            """
+            cursor.execute(create_sql)
+
+            insert_sql = f"""
+                INSERT INTO {table_name}
+                (RUN_ID, SCENARIO_NAME, MONTH_NUM, WEIGHT, CUMULATIVE_WEIGHT, CREATED_AT)
+                VALUES (:1, :2, :3, :4, :5, :6)
             """
 
             now = datetime.now()
             data = []
-            for i, (q, w) in enumerate(zip(quarters, weights)):
-                quarter_num = int(q.replace('Q', ''))
-                data.append((run_id, scenario_name, quarter_num, w, now))
+            cumulative = 0
+
+            # Assuming pattern_df has columns like 'Period' and weight column
+            weight_col = None
+            for col in pattern_df.columns:
+                if 'ağırlık' in col.lower() or 'weight' in col.lower():
+                    weight_col = col
+                    break
+
+            if weight_col is None:
+                # Try to find numeric column
+                for col in pattern_df.columns:
+                    if pattern_df[col].dtype in ['float64', 'int64']:
+                        weight_col = col
+                        break
+
+            for idx, row in pattern_df.iterrows():
+                month_num = idx + 1 if isinstance(idx, int) else int(row.get('Period', idx + 1))
+                weight = float(row[weight_col]) if weight_col else 0
+                cumulative += weight
+                data.append((run_id, scenario_name, month_num, weight, cumulative, now))
+
+            cursor.executemany(insert_sql, data)
+            self.connection.commit()
+
+            rows_affected = cursor.rowcount
+            cursor.close()
+
+            return rows_affected
+        except Exception as e:
+            self.connection.rollback()
+            raise Exception(f"Error writing monthly pattern: {e}")
+
+    def write_cashflow_patterns(self, run_id: str, scenario_name: str,
+                                 months: List[int], weights: List[float],
+                                 table_name: str = 'CF_PATTERNS') -> int:
+        """
+        Write cashflow pattern data to CF_PATTERNS table (180 monthly)
+
+        Args:
+            run_id: Unique run identifier
+            scenario_name: Name of the scenario (Base or scenario name)
+            months: List of month numbers (1-180)
+            weights: List of weight values
+            table_name: Target table name
+
+        Returns:
+            Number of rows written
+        """
+        if not self.connection:
+            raise Exception("Not connected to database")
+
+        try:
+            cursor = self.connection.cursor()
+
+            # Create table if not exists
+            create_sql = f"""
+                BEGIN
+                    EXECUTE IMMEDIATE 'CREATE TABLE {table_name} (
+                        ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                        RUN_ID VARCHAR2(50) NOT NULL,
+                        SCENARIO_NAME VARCHAR2(100) NOT NULL,
+                        MONTH_NUM NUMBER(3) NOT NULL,
+                        WEIGHT NUMBER(18,10) NOT NULL,
+                        CUMULATIVE_WEIGHT NUMBER(18,10),
+                        CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )';
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        IF SQLCODE = -955 THEN NULL; END IF;
+                END;
+            """
+            cursor.execute(create_sql)
+
+            insert_sql = f"""
+                INSERT INTO {table_name}
+                (RUN_ID, SCENARIO_NAME, MONTH_NUM, WEIGHT, CUMULATIVE_WEIGHT, CREATED_AT)
+                VALUES (:1, :2, :3, :4, :5, :6)
+            """
+
+            now = datetime.now()
+            data = []
+            cumulative = 0
+
+            for month, weight in zip(months, weights):
+                cumulative += weight
+                data.append((run_id, scenario_name, month, weight, cumulative, now))
 
             cursor.executemany(insert_sql, data)
             self.connection.commit()
@@ -265,8 +410,24 @@ class OracleConnector:
             self.connection.rollback()
             raise Exception(f"Error writing cashflow patterns: {e}")
 
+    def get_cf_pattern_table_name(self, run_id: str, scenario_name: str) -> str:
+        """
+        Generate a unique table name for a scenario's CF pattern
+
+        Args:
+            run_id: Run identifier
+            scenario_name: Scenario name
+
+        Returns:
+            Table name string
+        """
+        # Clean scenario name for table naming
+        clean_name = re.sub(r'[^a-zA-Z0-9]', '_', scenario_name).upper()
+        return f"CF_{clean_name}_{run_id[-8:]}"
+
     def save_analysis_result(self, run_id: str, scenario_name: str,
                              script_name: str, result_value: float,
+                             script_order: int = 0,
                              parameters: Dict = None) -> bool:
         """
         Save analysis result to ANALYSIS_RESULTS table
@@ -276,6 +437,7 @@ class OracleConnector:
             scenario_name: Name of the scenario
             script_name: Name of the SQL script
             result_value: Calculated result value
+            script_order: Execution order of the script
             parameters: Script parameters used
 
         Returns:
@@ -287,16 +449,36 @@ class OracleConnector:
         try:
             cursor = self.connection.cursor()
 
+            # Create table if not exists
+            create_sql = """
+                BEGIN
+                    EXECUTE IMMEDIATE 'CREATE TABLE ANALYSIS_RESULTS (
+                        ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                        RUN_ID VARCHAR2(50) NOT NULL,
+                        SCENARIO_NAME VARCHAR2(100) NOT NULL,
+                        SCRIPT_NAME VARCHAR2(200) NOT NULL,
+                        SCRIPT_ORDER NUMBER(3),
+                        RESULT_VALUE NUMBER(20,4),
+                        PARAMETERS CLOB,
+                        EXECUTED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )';
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        IF SQLCODE = -955 THEN NULL; END IF;
+                END;
+            """
+            cursor.execute(create_sql)
+
             insert_sql = """
                 INSERT INTO ANALYSIS_RESULTS
-                (RUN_ID, SCENARIO_NAME, SCRIPT_NAME, RESULT_VALUE, PARAMETERS, EXECUTED_AT)
-                VALUES (:1, :2, :3, :4, :5, :6)
+                (RUN_ID, SCENARIO_NAME, SCRIPT_NAME, SCRIPT_ORDER, RESULT_VALUE, PARAMETERS, EXECUTED_AT)
+                VALUES (:1, :2, :3, :4, :5, :6, :7)
             """
 
             params_json = json.dumps(parameters) if parameters else None
 
             cursor.execute(insert_sql, (
-                run_id, scenario_name, script_name,
+                run_id, scenario_name, script_name, script_order,
                 result_value, params_json, datetime.now()
             ))
             self.connection.commit()
@@ -321,7 +503,7 @@ class OracleConnector:
             raise Exception("Not connected to database")
 
         sql = """
-            SELECT RUN_ID, SCENARIO_NAME, SCRIPT_NAME, RESULT_VALUE,
+            SELECT RUN_ID, SCENARIO_NAME, SCRIPT_NAME, SCRIPT_ORDER, RESULT_VALUE,
                    PARAMETERS, EXECUTED_AT
             FROM ANALYSIS_RESULTS
             ORDER BY EXECUTED_AT DESC

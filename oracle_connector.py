@@ -4,6 +4,7 @@ Handles connection, query execution, and data transfer with Oracle DB
 """
 import oracledb
 import pandas as pd
+from collections import defaultdict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import json
@@ -391,16 +392,21 @@ class OracleConnector:
             scenario_s = str(scenario_name)[:100]
 
             # Aynı run_id + Scenario için mevcut satırları sil (tekrar yazınca ORA-00001 önlenir)
-            delete_sql = f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO = :2"
-            cursor.execute(delete_sql, (run_id_s, scenario_s))
+            try:
+                cursor.execute(
+                    f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO = :2",
+                    (run_id_s, scenario_s)
+                )
+            except Exception:
+                # Eski tabloda SCENARIO_NAME olabilir
+                try:
+                    cursor.execute(
+                        f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO_NAME = :2",
+                        (run_id_s, scenario_s)
+                    )
+                except Exception:
+                    pass
 
-            insert_sql = f"""
-                INSERT INTO {table_name}
-                (RUN_ID, SCENARIO, ACCIDENT_YEAR, PERIOD, RATE)
-                VALUES (:1, :2, :3, :4, :5)
-            """
-
-            data = []
             # accident_year from run_id YYMM -> 20YY
             try:
                 accident_year = 2000 + int(str(run_id)[:2])
@@ -408,6 +414,8 @@ class OracleConnector:
                 accident_year = 2000
             dec = 4
 
+            # Period bazında tekilleştir: aynı period iki kez gelirse rate'leri topla (ORA-00001 önlenir)
+            by_period = defaultdict(float)
             for month, weight in zip(months, weights):
                 try:
                     v = float(weight)
@@ -415,10 +423,18 @@ class OracleConnector:
                         v = 0.0
                 except (TypeError, ValueError):
                     v = 0.0
-                rate = round(v, dec)
                 m = int(month) if 1 <= int(month) <= 180 else min(max(1, int(month)), 180)
-                data.append((run_id_s, scenario_s, accident_year, m, rate))
+                by_period[m] += v
+            data = [
+                (run_id_s, scenario_s, accident_year, p, round(by_period[p], dec))
+                for p in sorted(by_period.keys())
+            ]
 
+            insert_sql = f"""
+                INSERT INTO {table_name}
+                (RUN_ID, SCENARIO, ACCIDENT_YEAR, PERIOD, RATE)
+                VALUES (:1, :2, :3, :4, :5)
+            """
             cursor.executemany(insert_sql, data)
             self.connection.commit()
 

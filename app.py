@@ -1230,50 +1230,91 @@ def oracle_write_cashflows():
         written = {}
         pattern_names = []
 
-        def read_180_weights(excel_path):
+        def read_180_weights_by_year(excel_path):
+            """Excel '180 aylık pattern' sayfasını oku; Kaza Yılı bazında (accident_year, months, weights) listesi döner."""
             try:
-                monthly_pattern = pd.read_excel(excel_path, sheet_name='180 aylık pattern')
+                df = pd.read_excel(excel_path, sheet_name='180 aylık pattern')
             except ValueError:
-                base_pattern = pd.read_excel(excel_path, sheet_name='cashflow pattern')
-                avg_pattern = base_pattern.groupby('Period')['Normalize Ağırlık'].mean()
-                return list(range(1, len(avg_pattern) + 1)), [round(float(avg_pattern.iloc[i]), 10) for i in range(len(avg_pattern))]
+                return []
+            if df.empty:
+                return []
+            year_col = None
+            period_col = None
             weight_col = None
-            for col in monthly_pattern.columns:
-                if 'ağırlık' in col.lower() or 'weight' in col.lower():
+            for col in df.columns:
+                c = str(col).lower()
+                if 'kaza' in c or 'year' in c or col == 'ORIGIN_YEAR':
+                    year_col = col
+                if 'ay' in c or 'period' in c or col == 'Period':
+                    period_col = col
+                if 'ağırlık' in c or 'weight' in c or 'rate' in c:
                     weight_col = col
-                    break
+            if period_col is None:
+                period_col = df.columns[1] if len(df.columns) > 1 else df.columns[0]
             if weight_col is None:
-                for col in monthly_pattern.columns:
-                    if monthly_pattern[col].dtype in ['float64', 'int64']:
+                for col in df.columns:
+                    if df[col].dtype in ['float64', 'int64'] and col != year_col and col != period_col:
                         weight_col = col
                         break
-            if not weight_col:
-                return None, None
-            months = list(range(1, len(monthly_pattern) + 1))
-            weights = [round(float(monthly_pattern[weight_col].iloc[i]) if pd.notna(monthly_pattern[weight_col].iloc[i]) else 0.0, 10)
-                       for i in range(len(monthly_pattern))]
-            return months, weights
+            if weight_col is None:
+                return []
+            if year_col is None:
+                years = [None]
+            else:
+                years = sorted(df[year_col].dropna().unique().tolist())
+                if not years:
+                    years = [None]
 
-        # Base: pattern adı base_YYMM
+            result = []
+            sort_col = period_col if period_col in df.columns else (df.columns[0] if len(df.columns) else None)
+            for year in years:
+                if year is not None:
+                    sub = df[df[year_col] == year].copy()
+                else:
+                    sub = df.copy()
+                if sort_col and sort_col in sub.columns:
+                    sub = sub.sort_values(sort_col)
+                months = list(range(1, len(sub) + 1))
+                weights = [round(float(sub[weight_col].iloc[i]) if pd.notna(sub[weight_col].iloc[i]) else 0.0, 10)
+                           for i in range(len(sub))]
+                if len(months) > 0:
+                    result.append((int(year) if year is not None else None, months, weights))
+            return result
+
+        # Base: kaza yılı bazlı yaz
         if 'Base' in scenarios_to_write:
-            months, weights = read_180_weights(base_file)
-            if months and weights:
+            by_year = read_180_weights_by_year(base_file)
+            if by_year:
                 pattern_name = f'base_{run_id}'
-                rows = oracle_db.write_cashflow_patterns(run_id, pattern_name, months, weights)
-                written['Base'] = rows
+                oracle_db.delete_cashflow_patterns_for_scenario(run_id, pattern_name)
+                total_rows = 0
+                for accident_year, months, weights in by_year:
+                    rows = oracle_db.write_cashflow_patterns(
+                        run_id, pattern_name, months, weights,
+                        accident_year=accident_year
+                    )
+                    total_rows += rows
+                written['Base'] = total_rows
                 pattern_names.append(pattern_name)
 
-        # Senaryolar: kullanıcı adı_YYMM
+        # Senaryolar: kaza yılı bazlı yaz
         session_scenarios = session.get('scenarios', [])
         for scenario in session_scenarios:
             if scenario['name'] in scenarios_to_write:
                 scenario_file = os.path.join(OUTPUT_DIR, f"scenario_{scenario['name']}.xlsx")
                 if os.path.exists(scenario_file):
-                    months, weights = read_180_weights(scenario_file)
-                    if months and weights:
+                    by_year = read_180_weights_by_year(scenario_file)
+                    if by_year:
                         pattern_name = f"{scenario['name']}_{run_id}"
-                        rows = oracle_db.write_cashflow_patterns(run_id, pattern_name, months, weights)
-                        written[scenario['name']] = rows
+                        oracle_db.delete_cashflow_patterns_for_scenario(run_id, pattern_name)
+                        total_rows = 0
+                        for accident_year, months, weights in by_year:
+                            rows = oracle_db.write_cashflow_patterns(
+                                run_id, pattern_name, months, weights,
+                                accident_year=accident_year
+                            )
+                            total_rows += rows
+                        written[scenario['name']] = total_rows
                         pattern_names.append(pattern_name)
 
         session['oracle_run_id'] = run_id

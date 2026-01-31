@@ -359,10 +359,12 @@ class OracleConnector:
 
     def write_cashflow_patterns(self, run_id: str, scenario_name: str,
                                  months: List[int], weights: List[float],
+                                 accident_year: Optional[int] = None,
                                  table_name: str = 'CF_PATTERNS') -> int:
         """
         Write cashflow pattern data to CF_PATTERNS table.
-        Columns: run_id, Scenario, accident_year, period, rate (only these 5).
+        Columns: run_id, Scenario, accident_year, period, rate.
+        accident_year verilmezse run_id'den türetilir (YYMM -> 20YY).
         """
         if not self.connection:
             raise Exception("Not connected to database")
@@ -370,7 +372,7 @@ class OracleConnector:
         try:
             cursor = self.connection.cursor()
 
-            # Create table if not exists: run_id, Scenario, accident_year, period, rate
+            # Create table if not exists
             create_sql = f"""
                 BEGIN
                     EXECUTE IMMEDIATE 'CREATE TABLE {table_name} (
@@ -391,30 +393,46 @@ class OracleConnector:
             run_id_s = str(run_id)[:50]
             scenario_s = str(scenario_name)[:100]
 
-            # Aynı run_id + Scenario için mevcut satırları sil (tekrar yazınca ORA-00001 önlenir)
-            try:
-                cursor.execute(
-                    f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO = :2",
-                    (run_id_s, scenario_s)
-                )
-            except Exception:
-                # Eski tabloda SCENARIO_NAME olabilir
+            if accident_year is not None:
+                # Sadece bu (run_id, Scenario, accident_year) için sil
                 try:
                     cursor.execute(
-                        f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO_NAME = :2",
+                        f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO = :2 AND ACCIDENT_YEAR = :3",
+                        (run_id_s, scenario_s, int(accident_year))
+                    )
+                except Exception:
+                    try:
+                        cursor.execute(
+                            f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO_NAME = :2",
+                            (run_id_s, scenario_s)
+                        )
+                    except Exception:
+                        pass
+            else:
+                # Tüm (run_id, Scenario) için sil
+                try:
+                    cursor.execute(
+                        f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO = :2",
                         (run_id_s, scenario_s)
                     )
                 except Exception:
-                    pass
+                    try:
+                        cursor.execute(
+                            f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO_NAME = :2",
+                            (run_id_s, scenario_s)
+                        )
+                    except Exception:
+                        pass
 
-            # accident_year from run_id YYMM -> 20YY
-            try:
-                accident_year = 2000 + int(str(run_id)[:2])
-            except (ValueError, TypeError):
-                accident_year = 2000
+            if accident_year is None:
+                try:
+                    accident_year = 2000 + int(str(run_id)[:2])
+                except (ValueError, TypeError):
+                    accident_year = 2000
+            else:
+                accident_year = int(accident_year)
+
             dec = 4
-
-            # Period bazında tekilleştir: aynı period iki kez gelirse rate'leri topla (ORA-00001 önlenir)
             by_period = defaultdict(float)
             for month, weight in zip(months, weights):
                 try:
@@ -445,6 +463,30 @@ class OracleConnector:
         except Exception as e:
             self.connection.rollback()
             raise Exception(f"Error writing cashflow patterns: {e}")
+
+    def delete_cashflow_patterns_for_scenario(self, run_id: str, scenario_name: str,
+                                               table_name: str = 'CF_PATTERNS') -> None:
+        """Aynı run_id + Scenario için tüm satırları siler (kaza yılı bazlı yazmadan önce)."""
+        if not self.connection:
+            raise Exception("Not connected to database")
+        cursor = self.connection.cursor()
+        run_id_s = str(run_id)[:50]
+        scenario_s = str(scenario_name)[:100]
+        try:
+            cursor.execute(
+                f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO = :2",
+                (run_id_s, scenario_s)
+            )
+        except Exception:
+            try:
+                cursor.execute(
+                    f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO_NAME = :2",
+                    (run_id_s, scenario_s)
+                )
+            except Exception:
+                pass
+        self.connection.commit()
+        cursor.close()
 
     def get_cf_pattern_table_name(self, run_id: str, scenario_name: str) -> str:
         """

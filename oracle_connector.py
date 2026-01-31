@@ -360,17 +360,8 @@ class OracleConnector:
                                  months: List[int], weights: List[float],
                                  table_name: str = 'CF_PATTERNS') -> int:
         """
-        Write cashflow pattern data to CF_PATTERNS table (180 monthly)
-
-        Args:
-            run_id: Unique run identifier
-            scenario_name: Name of the scenario (Base or scenario name)
-            months: List of month numbers (1-180)
-            weights: List of weight values
-            table_name: Target table name
-
-        Returns:
-            Number of rows written
+        Write cashflow pattern data to CF_PATTERNS table.
+        Columns: run_id, Scenario, accident_year, period, rate (only these 5).
         """
         if not self.connection:
             raise Exception("Not connected to database")
@@ -378,17 +369,16 @@ class OracleConnector:
         try:
             cursor = self.connection.cursor()
 
-            # Create table if not exists
+            # Create table if not exists: run_id, Scenario, accident_year, period, rate
             create_sql = f"""
                 BEGIN
                     EXECUTE IMMEDIATE 'CREATE TABLE {table_name} (
-                        ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                         RUN_ID VARCHAR2(50) NOT NULL,
-                        SCENARIO_NAME VARCHAR2(100) NOT NULL,
-                        MONTH_NUM NUMBER(3) NOT NULL,
-                        WEIGHT NUMBER(18,10) NOT NULL,
-                        CUMULATIVE_WEIGHT NUMBER(18,10),
-                        CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        SCENARIO VARCHAR2(100) NOT NULL,
+                        ACCIDENT_YEAR NUMBER(4) NOT NULL,
+                        PERIOD NUMBER(3) NOT NULL,
+                        RATE NUMBER(18,10) NOT NULL,
+                        PRIMARY KEY (RUN_ID, SCENARIO, ACCIDENT_YEAR, PERIOD)
                     )';
                 EXCEPTION
                     WHEN OTHERS THEN
@@ -399,17 +389,18 @@ class OracleConnector:
 
             insert_sql = f"""
                 INSERT INTO {table_name}
-                (RUN_ID, SCENARIO_NAME, MONTH_NUM, WEIGHT, CUMULATIVE_WEIGHT, CREATED_AT)
-                VALUES (:1, :2, :3, :4, :5, :6)
+                (RUN_ID, SCENARIO, ACCIDENT_YEAR, PERIOD, RATE)
+                VALUES (:1, :2, :3, :4, :5)
             """
 
-            now = datetime.now()
             data = []
-            cumulative = 0.0
-            # ORA-01438: fit NUMBER(18,10) or NUMBER(10,4); VARCHAR2 lengths
             run_id_s = str(run_id)[:50]
-            scenario_name_s = str(scenario_name)[:100]
-            # 4 decimals: fits NUMBER(10,4) and NUMBER(18,10); avoids ORA-01438
+            scenario_s = str(scenario_name)[:100]
+            # accident_year from run_id YYMM -> 20YY
+            try:
+                accident_year = 2000 + int(str(run_id)[:2])
+            except (ValueError, TypeError):
+                accident_year = 2000
             dec = 4
 
             for month, weight in zip(months, weights):
@@ -419,12 +410,9 @@ class OracleConnector:
                         v = 0.0
                 except (TypeError, ValueError):
                     v = 0.0
-                w = round(v, dec)
-                cumulative = round(cumulative + w, dec)
-                if cumulative > 999999.9999:
-                    cumulative = 999999.9999
+                rate = round(v, dec)
                 m = int(month) if 1 <= int(month) <= 180 else min(max(1, int(month)), 180)
-                data.append((run_id_s, scenario_name_s, m, w, round(cumulative, dec), now))
+                data.append((run_id_s, scenario_s, accident_year, m, rate))
 
             cursor.executemany(insert_sql, data)
             self.connection.commit()

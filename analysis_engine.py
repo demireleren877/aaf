@@ -208,7 +208,7 @@ class AnalysisEngine:
                 exec_params = {**user_params}
 
                 # The cf_pattern references the CF_PATTERNS table filtered by scenario
-                # Scripts should use: WHERE SCENARIO_NAME = '&scenario_name' AND RUN_ID = '&run_id'
+                # Scripts should use: WHERE SCENARIO = '&scenario_name' AND RUN_ID = '&run_id' (table columns: RUN_ID, SCENARIO, ACCIDENT_YEAR, PERIOD, RATE)
                 exec_params['cf_pattern'] = cf_table_name
                 exec_params['scenario_name'] = scenario
                 exec_params['run_id'] = run_id

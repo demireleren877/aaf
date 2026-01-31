@@ -329,12 +329,21 @@ class OracleConnector:
 
             run_id_s = str(run_id)[:50]
             scenario_name_s = str(scenario_name)[:100]
+            dec = 4
             for idx, row in pattern_df.iterrows():
                 month_num = idx + 1 if isinstance(idx, int) else int(row.get('Period', idx + 1))
                 month_num = min(max(1, month_num), 180)
-                weight = round(float(row[weight_col]) if weight_col else 0, 10)
-                cumulative = round(cumulative + weight, 10)
-                data.append((run_id_s, scenario_name_s, month_num, weight, cumulative, now))
+                try:
+                    v = float(row[weight_col]) if weight_col else 0.0
+                    if not (v == v and abs(v) != float('inf')):
+                        v = 0.0
+                except (TypeError, ValueError):
+                    v = 0.0
+                weight = round(v, dec)
+                cumulative = round(cumulative + weight, dec)
+                if cumulative > 999999.9999:
+                    cumulative = 999999.9999
+                data.append((run_id_s, scenario_name_s, month_num, weight, round(cumulative, dec), now))
 
             cursor.executemany(insert_sql, data)
             self.connection.commit()
@@ -397,15 +406,25 @@ class OracleConnector:
             now = datetime.now()
             data = []
             cumulative = 0.0
-            # ORA-01438: fit NUMBER(18,10) and VARCHAR2 lengths
+            # ORA-01438: fit NUMBER(18,10) or NUMBER(10,4); VARCHAR2 lengths
             run_id_s = str(run_id)[:50]
             scenario_name_s = str(scenario_name)[:100]
+            # 4 decimals: fits NUMBER(10,4) and NUMBER(18,10); avoids ORA-01438
+            dec = 4
 
             for month, weight in zip(months, weights):
-                w = round(float(weight), 10)
-                cumulative = round(cumulative + w, 10)
+                try:
+                    v = float(weight)
+                    if not (v == v and abs(v) != float('inf')):
+                        v = 0.0
+                except (TypeError, ValueError):
+                    v = 0.0
+                w = round(v, dec)
+                cumulative = round(cumulative + w, dec)
+                if cumulative > 999999.9999:
+                    cumulative = 999999.9999
                 m = int(month) if 1 <= int(month) <= 180 else min(max(1, int(month)), 180)
-                data.append((run_id_s, scenario_name_s, m, w, cumulative, now))
+                data.append((run_id_s, scenario_name_s, m, w, round(cumulative, dec), now))
 
             cursor.executemany(insert_sql, data)
             self.connection.commit()

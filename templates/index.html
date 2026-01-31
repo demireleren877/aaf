@@ -253,8 +253,9 @@
         .toast-message { font-size: 12px; }
 
         /* Loading */
-        .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 250; align-items: center; justify-content: center; }
+        .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 250; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
         .loading-overlay.active { display: flex; }
+        .loading-overlay .loading-message { color: #fff; font-size: 14px; max-width: 320px; text-align: center; }
         .spinner { width: 36px; height: 36px; border: 3px solid var(--border-color); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -978,6 +979,7 @@ WHERE run_id = :run_id
     <!-- Loading -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
+        <div class="loading-message" id="loadingOverlayMessage"></div>
     </div>
 
     <!-- Toast -->
@@ -1162,7 +1164,12 @@ WHERE run_id = :run_id
             return instance;
         }
 
-        function showLoading(show) { $('loadingOverlay').classList.toggle('active', show); }
+        function showLoading(show, message = '') {
+            const overlay = $('loadingOverlay');
+            const msgEl = $('loadingOverlayMessage');
+            overlay.classList.toggle('active', show);
+            if (msgEl) { msgEl.textContent = message || ''; msgEl.style.display = message ? 'block' : 'none'; }
+        }
 
         function toast(msg, type = 'success') {
             const t = document.createElement('div');
@@ -2364,48 +2371,68 @@ WHERE run_id = :run_id
                 return;
             }
 
-            showLoading(true);
+            const loadBtn = document.querySelector('#oracleConnectedForm button.btn-primary');
+            const originalLoadBtnHtml = loadBtn ? loadBtn.innerHTML : '';
+            if (loadBtn) { loadBtn.disabled = true; loadBtn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px;"></span> Yükleniyor...'; }
+
+            showLoading(true, 'Veritabanından veri çekiliyor ve hesaplanıyor... Bu işlem büyük tablolarda birkaç dakika sürebilir. Lütfen bekleyin.');
+
             try {
-                const res = await fetch('/api/oracle/load-and-calculate', {
+                const startRes = await fetch('/api/oracle/load-and-calculate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        table: table || null,
-                        query: query || null
-                    })
+                    body: JSON.stringify({ table: table || null, query: query || null })
                 });
-                const data = await res.json();
+                const startData = await startRes.json();
 
-                if (data.success) {
-                    toast(data.message);
-                    dataLoaded = true;
-
-                    // Update dashboard stats
-                    $('dashStatRows').textContent = fmt(data.stats.total_rows);
-                    $('dashStatClaims').textContent = fmt(data.stats.unique_claims);
-                    $('dashStatPaid').textContent = (data.stats.total_paid / 1000000).toFixed(1);
-                    $('dashStatOS').textContent = (data.stats.total_os / 1000000).toFixed(1);
-
-                    // Show dashboard content
-                    $('welcomeSection').style.display = 'none';
-                    $('dashboardContent').style.display = 'block';
-
-                    // Load charts and summary
-                    loadYearSummary();
-
-                    // Enable buttons
-                    const writeOracleBtn = $('writeOracleBtn');
-                    const runAnalysisBtn = $('runAnalysisBtn');
-                    if (writeOracleBtn) writeOracleBtn.disabled = false;
-                    if (runAnalysisBtn) runAnalysisBtn.disabled = false;
-                } else {
-                    toast(data.error || 'Failed to load data', 'error');
+                if (!startData.success) {
+                    toast(startData.error || 'Yükleme başlatılamadı', 'error');
+                    showLoading(false);
+                    if (loadBtn) { loadBtn.disabled = false; loadBtn.innerHTML = originalLoadBtnHtml; }
+                    return;
                 }
+
+                const jobId = startData.job_id;
+                const pollInterval = 1500;
+                const poll = async () => {
+                    const res = await fetch(`/api/oracle/load-job/${jobId}`);
+                    const data = await res.json();
+                    if (data.status === 'done' && data.result) {
+                        const r = data.result;
+                        toast(r.message);
+                        dataLoaded = true;
+                        $('dashStatRows').textContent = fmt(r.stats.total_rows);
+                        $('dashStatClaims').textContent = fmt(r.stats.unique_claims);
+                        $('dashStatPaid').textContent = (r.stats.total_paid / 1000000).toFixed(1);
+                        $('dashStatOS').textContent = (r.stats.total_os / 1000000).toFixed(1);
+                        $('welcomeSection').style.display = 'none';
+                        $('dashboardContent').style.display = 'block';
+                        loadYearSummary();
+                        const writeOracleBtn = $('writeOracleBtn');
+                        const runAnalysisBtn = $('runAnalysisBtn');
+                        if (writeOracleBtn) writeOracleBtn.disabled = false;
+                        if (runAnalysisBtn) runAnalysisBtn.disabled = false;
+                        return true;
+                    }
+                    if (data.status === 'error') {
+                        toast(data.error || 'Veri yüklenemedi', 'error');
+                        return true;
+                    }
+                    return false;
+                };
+
+                do {
+                    const done = await poll();
+                    if (done) break;
+                    await new Promise(r => setTimeout(r, pollInterval));
+                } while (true);
             } catch (e) {
-                toast('Failed to load data from Oracle', 'error');
+                toast('Veritabanından veri yüklenirken hata oluştu', 'error');
                 console.error(e);
             }
+
             showLoading(false);
+            if (loadBtn) { loadBtn.disabled = false; loadBtn.innerHTML = originalLoadBtnHtml; }
         }
 
         // ===== SQL Scripts Functions =====

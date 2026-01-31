@@ -7,6 +7,8 @@ from werkzeug.utils import secure_filename
 import pandas as pd
 import os
 import json
+import uuid
+import threading
 from datetime import datetime
 from main import (
     load_and_prepare_data,
@@ -32,6 +34,9 @@ current_data = {
     'file_path': None,
     'df': None
 }
+
+# Oracle load jobs (background): job_id -> { status, result?, error? }
+oracle_load_jobs = {}
 
 
 @app.route('/')
@@ -1105,76 +1110,108 @@ def oracle_fetch_data():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/oracle/load-and-calculate', methods=['POST'])
-def oracle_load_and_calculate():
-    """Oracle'dan veri çek ve base cashflow hesapla"""
+def _run_oracle_load_job(job_id, table_name, query):
+    """Arka planda Oracle veri yükleme ve base cashflow hesaplama (thread'de çalışır)."""
     try:
-        if not oracle_db.is_connected():
-            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
-
-        data = request.json
-        table_name = data.get('table')
-        query = data.get('query')
-
-        # Fetch data from Oracle
         if query:
             df_original = oracle_db.execute_query(query)
-        elif table_name:
-            df_original = oracle_db.execute_query(f"SELECT * FROM {table_name}")
         else:
-            return jsonify({'success': False, 'error': 'Tablo adı veya sorgu gerekli'}), 400
+            df_original = oracle_db.execute_query(f"SELECT * FROM {table_name}")
 
-        # Check required columns
         required_cols = ['CLAIM_NO', 'ORIGIN_YEAR', 'YEARMONTH', 'PAID_TL', 'OS_TL']
         missing_cols = [col for col in required_cols if col not in df_original.columns]
         if missing_cols:
-            return jsonify({
-                'success': False,
-                'error': f'Eksik kolonlar: {", ".join(missing_cols)}. Gerekli kolonlar: {", ".join(required_cols)}'
-            }), 400
+            oracle_load_jobs[job_id] = {
+                'status': 'error',
+                'error': f'Eksik kolonlar: {", ".join(missing_cols)}. Gerekli: {", ".join(required_cols)}'
+            }
+            return
 
-        # Session temizle
-        session.clear()
-
-        # Store dataframe in memory
         current_data['df'] = df_original
         current_data['file_path'] = 'oracle_query'
 
-        # Base cashflow hesapla
         df_base = convert_to_cashflow_format(df_original)
-        base_data = calculate_cashflow_pattern(df_base, 'base_cashflow', OUTPUT_DIR)
+        calculate_cashflow_pattern(df_base, 'base_cashflow', OUTPUT_DIR)
 
-        # Özet bilgileri
         total_rows = len(df_original)
         unique_claims = df_original['CLAIM_NO'].nunique()
         years = sorted(df_original['ORIGIN_YEAR'].unique().tolist())
-
-        # En son YEARMONTH'u bul
         max_yearmonth = df_original['YEARMONTH'].max()
         df_latest = df_original[df_original['YEARMONTH'] == max_yearmonth]
         total_paid = df_latest['PAID_TL'].sum()
         total_os = df_latest['OS_TL'].sum()
 
-        # Session'a kaydet
-        session['data_loaded'] = True
-        session['scenarios'] = []
-
-        return jsonify({
-            'success': True,
-            'message': f'Oracle\'dan {len(df_original)} satır veri yüklendi ve base cashflow hesaplandı',
-            'stats': {
-                'total_rows': total_rows,
-                'unique_claims': unique_claims,
-                'years': [int(y) for y in years],
-                'latest_yearmonth': int(max_yearmonth),
-                'total_paid': float(total_paid),
-                'total_os': float(total_os),
-                'base_file': 'base_cashflow.xlsx'
+        oracle_load_jobs[job_id] = {
+            'status': 'done',
+            'result': {
+                'success': True,
+                'message': f'Oracle\'dan {len(df_original)} satır veri yüklendi ve base cashflow hesaplandı',
+                'stats': {
+                    'total_rows': total_rows,
+                    'unique_claims': unique_claims,
+                    'years': [int(y) for y in years],
+                    'latest_yearmonth': int(max_yearmonth),
+                    'total_paid': float(total_paid),
+                    'total_os': float(total_os),
+                    'base_file': 'base_cashflow.xlsx'
+                }
             }
-        })
+        }
     except Exception as e:
         import traceback
         traceback.print_exc()
+        oracle_load_jobs[job_id] = {'status': 'error', 'error': str(e)}
+
+
+@app.route('/api/oracle/load-and-calculate', methods=['POST'])
+def oracle_load_and_calculate():
+    """Oracle yükleme işini başlat; hesaplama arka planda yapılır, sonuç polling ile alınır."""
+    try:
+        if not oracle_db.is_connected():
+            return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
+
+        data = request.json or {}
+        table_name = data.get('table')
+        query = (data.get('query') or '').strip()
+
+        if not query and not table_name:
+            return jsonify({'success': False, 'error': 'Tablo adı veya sorgu gerekli'}), 400
+
+        job_id = str(uuid.uuid4())
+        oracle_load_jobs[job_id] = {'status': 'running'}
+
+        thread = threading.Thread(
+            target=_run_oracle_load_job,
+            args=(job_id, table_name, query if query else None),
+            daemon=True
+        )
+        thread.start()
+
+        return jsonify({'success': True, 'job_id': job_id})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/oracle/load-job/<job_id>', methods=['GET'])
+def oracle_load_job_status(job_id):
+    """Arka plan Oracle yükleme işinin durumunu döndür; done ise session güncellenir."""
+    try:
+        job = oracle_load_jobs.get(job_id)
+        if not job:
+            return jsonify({'success': False, 'error': 'İş bulunamadı'}), 404
+
+        status = job.get('status', 'running')
+        if status == 'done':
+            session.clear()
+            session['data_loaded'] = True
+            session['scenarios'] = []
+            return jsonify({'success': True, 'status': 'done', 'result': job['result']})
+        if status == 'error':
+            return jsonify({'success': False, 'status': 'error', 'error': job.get('error', 'Bilinmeyen hata')})
+        return jsonify({'success': True, 'status': 'running'})
+    except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

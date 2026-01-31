@@ -387,6 +387,13 @@ class OracleConnector:
             """
             cursor.execute(create_sql)
 
+            run_id_s = str(run_id)[:50]
+            scenario_s = str(scenario_name)[:100]
+
+            # Aynı run_id + Scenario için mevcut satırları sil (tekrar yazınca ORA-00001 önlenir)
+            delete_sql = f"DELETE FROM {table_name} WHERE RUN_ID = :1 AND SCENARIO = :2"
+            cursor.execute(delete_sql, (run_id_s, scenario_s))
+
             insert_sql = f"""
                 INSERT INTO {table_name}
                 (RUN_ID, SCENARIO, ACCIDENT_YEAR, PERIOD, RATE)
@@ -394,8 +401,6 @@ class OracleConnector:
             """
 
             data = []
-            run_id_s = str(run_id)[:50]
-            scenario_s = str(scenario_name)[:100]
             # accident_year from run_id YYMM -> 20YY
             try:
                 accident_year = 2000 + int(str(run_id)[:2])

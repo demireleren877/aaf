@@ -355,6 +355,34 @@ class AnalysisEngine:
 
         return comparison
 
+    def run_script_by_patterns(self, script_id: str, run_id: str, pattern_names: List[str],
+                               user_params: Dict, cf_table_name: str = 'CF_PATTERNS') -> Dict:
+        """
+        Tek script'i her pattern için çalıştır; &cf_pattern, &run_id, &scenario_name substitute edilir.
+        Her çalıştırma tek bir pl_value döndürür.
+        Returns: { 'run_id': str, 'pl_values': { pattern_name: value } }
+        """
+        if not self.oracle or not self.oracle.is_connected():
+            raise Exception("Oracle not connected")
+
+        script = self.script_manager.get_by_id(script_id)
+        if not script:
+            raise Exception("Script bulunamadı")
+
+        pl_values = {}
+        for pattern_name in pattern_names:
+            exec_params = {**user_params}
+            exec_params['cf_pattern'] = cf_table_name
+            exec_params['run_id'] = run_id
+            exec_params['scenario_name'] = pattern_name
+            try:
+                value = self.execute_script_with_params(script, exec_params)
+                pl_values[pattern_name] = float(value) if value is not None else None
+            except Exception as e:
+                pl_values[pattern_name] = {'error': str(e)}
+
+        return {'run_id': run_id, 'pl_values': pl_values}
+
     def format_results_table(self, results: Dict, comparison: Dict) -> List[Dict]:
         """
         Format results as a table for display

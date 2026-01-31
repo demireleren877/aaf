@@ -664,8 +664,9 @@
                                     <div class="form-hint">Base is always included</div>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Select Scripts</label>
+                                    <label class="form-label">Select Script (tek script, &cf_pattern kullanır)</label>
                                     <div class="multi-select-container" id="analysisScriptMultiSelect"></div>
+                                    <div class="form-hint">Önce Write Cashflows ile pattern'ları yazın, sonra tek script seçip Run Analysis tıklayın.</div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Valuation Date</label>
@@ -2631,6 +2632,8 @@ WHERE run_id = :run_id
 
         // ===== Analysis Functions =====
         let lastAnalysisResults = null;
+        let lastWriteRunId = null;
+        let lastWritePatternNames = [];
 
         function updateAnalysisScriptSelect() {
             if (scripts.length > 0) {
@@ -2694,27 +2697,28 @@ WHERE run_id = :run_id
                 return;
             }
 
-            const selectedScenarios = multiSelectInstances['analysisScenarioMultiSelect']?.getSelected() || [];
             const selectedScriptNames = multiSelectInstances['analysisScriptMultiSelect']?.getSelected() || [];
             const valDate = $('analysisValDate').value;
 
             if (selectedScriptNames.length === 0) {
-                toast('Select at least one script', 'error');
+                toast('Bir script seçin', 'error');
+                return;
+            }
+            if (lastWritePatternNames.length === 0) {
+                toast('Önce "Write Cashflows to Oracle" ile pattern\'ları yazın', 'error');
                 return;
             }
 
-            // Get script IDs from names - preserve the order from UI
-            const scriptIds = selectedScriptNames.map(name => {
-                const script = scripts.find(s => s.name === name);
-                return script ? script.id : null;
-            }).filter(id => id);
+            const scriptId = scripts.find(s => s.name === selectedScriptNames[0])?.id;
+            if (!scriptId) {
+                toast('Script bulunamadı', 'error');
+                return;
+            }
 
-            // Collect custom params - use report_date instead of val_date
             const userParams = { report_date: valDate };
             document.querySelectorAll('.analysis-param').forEach(input => {
                 const paramName = input.id.replace('param_', '');
                 const val = input.value;
-                // Convert to number if needed
                 if (input.type === 'number' && val !== '') {
                     userParams[paramName] = parseFloat(val);
                 } else {
@@ -2722,19 +2726,16 @@ WHERE run_id = :run_id
                 }
             });
 
-            // Scenarios: Base + selected
-            const scenarioList = ['Base', ...selectedScenarios];
-
             showLoading(true);
             try {
-                const res = await fetch('/api/analysis/run', {
+                const res = await fetch('/api/analysis/run-by-patterns', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        scenarios: scenarioList,
-                        scripts: scriptIds,
-                        params: userParams,
-                        write_cashflows: true
+                        script_id: scriptId,
+                        run_id: lastWriteRunId,
+                        pattern_names: lastWritePatternNames,
+                        params: userParams
                     })
                 });
                 const data = await res.json();
@@ -2742,12 +2743,12 @@ WHERE run_id = :run_id
                 if (data.success) {
                     lastAnalysisResults = data;
                     renderAnalysisResults(data);
-                    toast(`Analysis completed! Run ID: ${data.run_id}`);
+                    toast(`Analiz tamamlandı. Run ID: ${data.run_id}`);
                 } else {
-                    toast(data.error || 'Analysis failed', 'error');
+                    toast(data.error || 'Analiz başarısız', 'error');
                 }
             } catch (e) {
-                toast('Analysis failed', 'error');
+                toast('Analiz başarısız', 'error');
                 console.error(e);
             }
             showLoading(false);
@@ -2759,58 +2760,48 @@ WHERE run_id = :run_id
 
             $('analysisRunId').textContent = data.run_id || '';
 
+            // Yeni akış: pl_values { base_2410: 50, scenario1_2410: 45 }
+            if (data.pl_values) {
+                $('analysisResultsHead').innerHTML = '<tr><th>Pattern</th><th class="num">pl_value</th></tr>';
+                let bodyHtml = '';
+                Object.entries(data.pl_values).forEach(([patternName, val]) => {
+                    const isError = val && typeof val === 'object' && val.error;
+                    const display = isError ? `<span style="color: var(--danger);">${val.error}</span>` : (val !== null && val !== undefined ? fmt(val) : '-');
+                    bodyHtml += `<tr><td>${patternName}</td><td class="num">${display}</td></tr>`;
+                });
+                $('analysisResultsBody').innerHTML = bodyHtml;
+                return;
+            }
+
+            // Eski format (uyumluluk)
             const scenarioList = Object.keys(data.results || {});
             const scriptIds = new Set();
             Object.values(data.results || {}).forEach(sr => {
                 Object.keys(sr).forEach(id => scriptIds.add(id));
             });
-
-            // Header
             let headerHtml = '<tr><th>Script</th>';
             scenarioList.forEach(s => {
                 headerHtml += `<th class="num">${s}</th>`;
-                if (s !== 'Base') {
-                    headerHtml += `<th class="num" style="color: var(--text-muted); font-size: 10px;">Diff %</th>`;
-                }
+                if (s !== 'Base') headerHtml += `<th class="num" style="color: var(--text-muted); font-size: 10px;">Diff %</th>`;
             });
             headerHtml += '</tr>';
             $('analysisResultsHead').innerHTML = headerHtml;
-
-            // Body
             let bodyHtml = '';
             scriptIds.forEach(scriptId => {
                 const script = scripts.find(s => s.id === scriptId);
                 const scriptName = script ? script.name : scriptId;
-
                 bodyHtml += `<tr><td>${scriptName}</td>`;
-
-                const baseVal = data.results['Base']?.[scriptId];
-
                 scenarioList.forEach(scenario => {
                     const val = data.results[scenario]?.[scriptId];
                     const isError = val && typeof val === 'object' && val.error;
-
-                    if (isError) {
-                        bodyHtml += `<td class="num" style="color: var(--danger);">Error</td>`;
-                    } else {
-                        bodyHtml += `<td class="num">${val !== null && val !== undefined ? fmt(Math.round(val)) : '-'}</td>`;
-                    }
-
+                    bodyHtml += isError ? `<td class="num" style="color: var(--danger);">Error</td>` : `<td class="num">${val != null ? fmt(Math.round(val)) : '-'}</td>`;
                     if (scenario !== 'Base') {
                         const comp = data.comparison?.[scriptId]?.[scenario];
-                        if (comp && comp.diff_pct !== undefined) {
-                            const diffColor = comp.diff_pct < 0 ? 'var(--success)' : (comp.diff_pct > 0 ? 'var(--danger)' : 'var(--text-muted)');
-                            const sign = comp.diff_pct > 0 ? '+' : '';
-                            bodyHtml += `<td class="num" style="color: ${diffColor}; font-size: 11px;">${sign}${comp.diff_pct.toFixed(2)}%</td>`;
-                        } else {
-                            bodyHtml += `<td class="num">-</td>`;
-                        }
+                        bodyHtml += comp && comp.diff_pct !== undefined ? `<td class="num" style="font-size: 11px;">${comp.diff_pct > 0 ? '+' : ''}${comp.diff_pct.toFixed(2)}%</td>` : '<td class="num">-</td>';
                     }
                 });
-
                 bodyHtml += '</tr>';
             });
-
             $('analysisResultsBody').innerHTML = bodyHtml;
         }
 
@@ -2842,6 +2833,8 @@ WHERE run_id = :run_id
                 const data = await res.json();
 
                 if (data.success) {
+                    lastWriteRunId = data.run_id || null;
+                    lastWritePatternNames = data.pattern_names || [];
                     toast(`${data.message} (Run ID: ${data.run_id})`);
                 } else {
                     toast(data.error || 'Failed to write', 'error');

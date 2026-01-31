@@ -327,11 +327,14 @@ class OracleConnector:
                         weight_col = col
                         break
 
+            run_id_s = str(run_id)[:50]
+            scenario_name_s = str(scenario_name)[:100]
             for idx, row in pattern_df.iterrows():
                 month_num = idx + 1 if isinstance(idx, int) else int(row.get('Period', idx + 1))
-                weight = float(row[weight_col]) if weight_col else 0
-                cumulative += weight
-                data.append((run_id, scenario_name, month_num, weight, cumulative, now))
+                month_num = min(max(1, month_num), 180)
+                weight = round(float(row[weight_col]) if weight_col else 0, 10)
+                cumulative = round(cumulative + weight, 10)
+                data.append((run_id_s, scenario_name_s, month_num, weight, cumulative, now))
 
             cursor.executemany(insert_sql, data)
             self.connection.commit()
@@ -393,11 +396,16 @@ class OracleConnector:
 
             now = datetime.now()
             data = []
-            cumulative = 0
+            cumulative = 0.0
+            # ORA-01438: fit NUMBER(18,10) and VARCHAR2 lengths
+            run_id_s = str(run_id)[:50]
+            scenario_name_s = str(scenario_name)[:100]
 
             for month, weight in zip(months, weights):
-                cumulative += weight
-                data.append((run_id, scenario_name, month, weight, cumulative, now))
+                w = round(float(weight), 10)
+                cumulative = round(cumulative + w, 10)
+                m = int(month) if 1 <= int(month) <= 180 else min(max(1, int(month)), 180)
+                data.append((run_id_s, scenario_name_s, m, w, cumulative, now))
 
             cursor.executemany(insert_sql, data)
             self.connection.commit()

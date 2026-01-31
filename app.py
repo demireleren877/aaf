@@ -1110,13 +1110,10 @@ def oracle_fetch_data():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def _run_oracle_load_job(job_id, table_name, query):
+def _run_oracle_load_job(job_id, query):
     """Arka planda Oracle veri yükleme ve base cashflow hesaplama (thread'de çalışır)."""
     try:
-        if query:
-            df_original = oracle_db.execute_query(query)
-        else:
-            df_original = oracle_db.execute_query(f"SELECT * FROM {table_name}")
+        df_original = oracle_db.execute_query(query)
 
         required_cols = ['CLAIM_NO', 'ORIGIN_YEAR', 'YEARMONTH', 'PAID_TL', 'OS_TL']
         missing_cols = [col for col in required_cols if col not in df_original.columns]
@@ -1171,18 +1168,17 @@ def oracle_load_and_calculate():
             return jsonify({'success': False, 'error': 'Oracle bağlantısı yok'}), 400
 
         data = request.json or {}
-        table_name = data.get('table')
         query = (data.get('query') or '').strip()
 
-        if not query and not table_name:
-            return jsonify({'success': False, 'error': 'Tablo adı veya sorgu gerekli'}), 400
+        if not query:
+            return jsonify({'success': False, 'error': 'SQL sorgusu gerekli'}), 400
 
         job_id = str(uuid.uuid4())
         oracle_load_jobs[job_id] = {'status': 'running'}
 
         thread = threading.Thread(
             target=_run_oracle_load_job,
-            args=(job_id, table_name, query if query else None),
+            args=(job_id, query),
             daemon=True
         )
         thread.start()

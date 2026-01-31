@@ -487,21 +487,14 @@
                                         </div>
 
                                         <div class="form-group" style="text-align: left; margin-bottom: 16px;">
-                                            <label class="form-label">Select Table or Write Query</label>
-                                            <select class="form-input form-select" id="oracleTableSelect" onchange="onTableSelect()">
-                                                <option value="">-- Select a table --</option>
-                                            </select>
-                                        </div>
-
-                                        <div class="form-group" style="text-align: left; margin-bottom: 16px;">
-                                            <label class="form-label">Or Custom SQL Query</label>
-                                            <textarea class="form-input" id="oracleQueryInput" rows="3" placeholder="SELECT * FROM your_table WHERE ..."></textarea>
-                                            <div class="form-hint">Required columns: CLAIM_NO, ORIGIN_YEAR, YEARMONTH, PAID_TL, OS_TL</div>
+                                            <label class="form-label">SQL Sorgusu</label>
+                                            <textarea class="form-input" id="oracleQueryInput" rows="4" placeholder="SELECT CLAIM_NO, ORIGIN_YEAR, YEARMONTH, PAID_TL, OS_TL FROM your_table WHERE ..."></textarea>
+                                            <div class="form-hint">Zorunlu kolonlar: CLAIM_NO, ORIGIN_YEAR, YEARMONTH, PAID_TL, OS_TL</div>
                                         </div>
 
                                         <button class="btn btn-primary" onclick="loadFromOracle()">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg>
-                                            Load Data from Oracle
+                                            Veriyi Yükle
                                         </button>
                                     </div>
                                 </div>
@@ -2332,42 +2325,17 @@ WHERE run_id = :run_id
             if (oracleConnected) {
                 notConnected.style.display = 'none';
                 connectedForm.style.display = 'block';
-                loadOracleTables();
             } else {
                 notConnected.style.display = 'block';
                 connectedForm.style.display = 'none';
             }
         }
 
-        async function loadOracleTables() {
-            try {
-                const res = await fetch('/api/oracle/tables');
-                const data = await res.json();
-                if (data.success) {
-                    const select = $('oracleTableSelect');
-                    select.innerHTML = '<option value="">-- Select a table --</option>';
-                    data.tables.forEach(table => {
-                        select.innerHTML += `<option value="${table}">${table}</option>`;
-                    });
-                }
-            } catch (e) {
-                console.error('Failed to load tables', e);
-            }
-        }
-
-        function onTableSelect() {
-            const table = $('oracleTableSelect').value;
-            if (table) {
-                $('oracleQueryInput').value = `SELECT * FROM ${table}`;
-            }
-        }
-
         async function loadFromOracle() {
-            const table = $('oracleTableSelect').value;
-            const query = $('oracleQueryInput').value.trim();
+            const query = ($('oracleQueryInput') && $('oracleQueryInput').value) ? $('oracleQueryInput').value.trim() : '';
 
-            if (!table && !query) {
-                toast('Select a table or enter a query', 'error');
+            if (!query) {
+                toast('SQL sorgusu girin', 'error');
                 return;
             }
 
@@ -2381,7 +2349,7 @@ WHERE run_id = :run_id
                 const startRes = await fetch('/api/oracle/load-and-calculate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ table: table || null, query: query || null })
+                    body: JSON.stringify({ query: query })
                 });
                 const startData = await startRes.json();
 
